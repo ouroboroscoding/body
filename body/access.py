@@ -57,7 +57,10 @@ def verify(sesh, name, right):
 	}
 
 	# Check with the authorization service
-	oResponse = Services.read('brain', 'verify', dData, sesh)
+	oResponse = Services.read('brain', 'verify', {
+		'body': dData,
+		'session': sesh
+	})
 
 	# If the response failed
 	if oResponse.error_exists():
@@ -112,7 +115,7 @@ def internal(body):
 
 	# If the key is missing
 	if '_internal_' not in body:
-		raise Services.ResponseException(error=(1001, [('_internal_', 'missing')]))
+		raise Services.ResponseException(error=(errors.BODY_FIELD, [('_internal_', 'missing')]))
 
 	# Verify the key, remove it if it's ok
 	if not Services.internal_key(body['_internal_']):

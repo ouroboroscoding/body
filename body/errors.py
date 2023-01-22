@@ -22,6 +22,9 @@ RIGHTS = 1000
 BODY_FIELD = 1001
 """A specific field in the body is missing or invalid"""
 
+NO_SESSION = 1002
+"""No session was passed to the request"""
+
 DB_NO_RECORD = 1100
 DB_DUPLICATE = 1101
 DB_CREATE_FAILED = 1102
@@ -30,9 +33,6 @@ DB_UPDATE_FAILED = 1104
 DB_KEY_BEING_USED = 1105
 DB_ARCHIVED = 1106
 """DB related errors"""
-
-PASSWORD_STRENGTH = 1200
-"""Auth errors"""
 
 def service_error(error):
 	"""Service Error
