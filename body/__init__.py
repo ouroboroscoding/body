@@ -12,8 +12,10 @@ __created__		= "2022-08-29"
 
 from . import	access as _access, \
 				errors as _errors, \
+				regex as _regex, \
 				users as _users
 
 access = _access
 errors = _errors
+regex = _regex
 users = _users
