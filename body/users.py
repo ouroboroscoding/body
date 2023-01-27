@@ -13,6 +13,9 @@ __created__ = "2022-08-29"
 # Pip imports
 from RestOC import Services
 
+SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000'
+"""System User ID"""
+
 def details(_id, fields=None, order=None, as_dict='_id'):
 	"""Details
 
