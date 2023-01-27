@@ -5,7 +5,7 @@ with open('README.md', 'r') as oF:
 
 setup(
 	name='Body-OC',
-	version='0.0.1',
+	version='0.1.0',
 	description='Body contains shared concepts among all body parts',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
@@ -21,6 +21,6 @@ setup(
 	license='Custom',
 	packages=['body'],
 	python_requires='>=3.10',
-	install_requires=['Rest-OC==1.0.0'],
+	install_requires=['Rest-OC==1.0.1'],
 	zip_safe=True
 )
