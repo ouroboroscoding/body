@@ -21,6 +21,8 @@ setup(
 	license='Custom',
 	packages=['body'],
 	python_requires='>=3.10',
-	install_requires=['Rest-OC==1.0.1'],
+	install_requires=[
+		'Rest-OC>=1.0.2'
+	],
 	zip_safe=True
 )
