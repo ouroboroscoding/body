@@ -17,19 +17,36 @@ from RestOC import Errors, Services
 from . import errors
 
 READ = 0x01
+R = 0x01
 """Allowed to read records"""
 
 UPDATE = 0x02
+U = 0x02
 """Allowed to update records"""
 
 CREATE = 0x04
+C = 0x04
 """Allowed to create records"""
 
 DELETE = 0x08
+D = 0x08
 """Allowed to delete records"""
 
 ALL = 0x0F
+A = 0x0F
 """Allowed to CRUD"""
+
+CREATE_UPDATE_DELETE = 0x0E
+CUD = 0x0E
+"""Create, Delete, and Update"""
+
+CREATE_READ_DELETE = 0x0D
+CRD = 0x0D
+"""Create, Read, and Delete"""
+
+READ_UPDATE = 0x03
+RU = 0x03
+"""Read and Update"""
 
 def verify(sesh, name, right):
 	"""Verify
