@@ -11,11 +11,13 @@ __email__		= "chris@ouroboroscoding.com"
 __created__		= "2022-08-29"
 
 from . import	access as _access, \
+				constants as _constants, \
 				errors as _errors, \
 				regex as _regex, \
 				users as _users
 
 access = _access
+constants = _constants
 errors = _errors
 regex = _regex
 users = _users

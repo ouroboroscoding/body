@@ -11,25 +11,42 @@ __email__ = "chris@ouroboroscoding.com"
 __created__ = "2022-08-29"
 
 # Pip imports
-from RestOC import Errors, Services
+from RestOC import Errors, REST, Services
 
 # Package imports
 from . import errors
 
-READ = 0x01
+READ = REST.READ
+R = REST.READ
 """Allowed to read records"""
 
-UPDATE = 0x02
+UPDATE = REST.UPDATE
+U = REST.UPDATE
 """Allowed to update records"""
 
-CREATE = 0x04
+CREATE = REST.CREATE
+C = REST.CREATE
 """Allowed to create records"""
 
-DELETE = 0x08
+DELETE = REST.DELETE
+D = REST.DELETE
 """Allowed to delete records"""
 
-ALL = 0x0F
+ALL = REST.ALL
+A = REST.ALL
 """Allowed to CRUD"""
+
+CREATE_UPDATE_DELETE = REST.CREATE_UPDATE_DELETE
+CUD = REST.CREATE_UPDATE_DELETE
+"""Create, Delete, and Update"""
+
+CREATE_READ_DELETE = REST.CREATE_READ_DELETE
+CRD = REST.CREATE_READ_DELETE
+"""Create, Read, and Delete"""
+
+READ_UPDATE = REST.READ_UPDATE
+RU = REST.READ_UPDATE
+"""Read and Update"""
 
 def verify(sesh, name, right):
 	"""Verify
