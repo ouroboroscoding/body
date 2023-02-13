@@ -22,7 +22,7 @@ setup(
 	packages=['body'],
 	python_requires='>=3.10',
 	install_requires=[
-		'Rest-OC>=1.0.2'
+		'Rest-OC>=1.0.3'
 	],
 	zip_safe=True
 )
