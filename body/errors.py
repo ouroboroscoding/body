@@ -25,6 +25,9 @@ BODY_FIELD = 1001
 NO_SESSION = 1002
 """No session was passed to the request"""
 
+ALREADY_DONE = 1003
+"""Indicates the request has already been done, and can't be done again"""
+
 DB_NO_RECORD = 1100
 DB_DUPLICATE = 1101
 DB_CREATE_FAILED = 1102
