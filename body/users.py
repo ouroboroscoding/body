@@ -47,7 +47,9 @@ def details(_id, fields=None, order=None, as_dict='_id'):
 		dData['order'] = order
 
 	# Make the request using an internal key
-	oResponse = Services.request('brain', 'read', 'users', dData)
+	oResponse = Services.request('brain', 'read', 'users', {
+		'data': dData
+	})
 
 	# If there's an error
 	if oResponse.error_exists():

@@ -19,8 +19,8 @@ from RestOC import Conf, EMail
 RIGHTS = 1000
 """Rights insufficient or missing"""
 
-BODY_FIELD = 1001
-"""A specific field in the body is missing or invalid"""
+DATA_FIELDS = 1001
+"""One or more data fields is missing or invalid"""
 
 NO_SESSION = 1002
 """No session was passed to the request"""
@@ -58,9 +58,10 @@ def service_error(error):
 	# Generate a list of the individual parts of the error
 	lErrors = [
 		'ERROR MESSAGE\n\n%s\n' % error['traceback'],
-		'REQUEST\n\n%s %s:%s\n' % (error['method'], error['service'], error['path']),
-		'BODY\n\n%s\n' % pformat(error['body']),
+		'REQUEST\n\n%s %s:%s\n' % (error['method'], error['service'], error['path'])
 	]
+	if 'data' in error and error['data']:
+		lErrors.append('DATA\n\n%s\n' % pformat(error['data']))
 	if 'session' in error and error['session']:
 		lErrors.append('SESSION\n\n%s\n' % pformat({k:error['session'][k] for k in error['session']}))
 	if 'environ' in error and error['environ']:
