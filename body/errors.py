@@ -22,10 +22,7 @@ RIGHTS = 1000
 DATA_FIELDS = 1001
 """One or more data fields is missing or invalid"""
 
-NO_SESSION = 1002
-"""No session was passed to the request"""
-
-ALREADY_DONE = 1003
+ALREADY_DONE = 1002
 """Indicates the request has already been done, and can't be done again"""
 
 DB_NO_RECORD = 1100
