@@ -1,5 +1,5 @@
 # coding=utf8
-"""REST Config
+"""Config
 
 Configuration for loading and accessing REST services
 """
@@ -9,8 +9,8 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-17"
 
-class RestConfig(object):
-	"""REST Config class
+class Config(object):
+	"""Config class
 
 	Represents configuration data for connecting to/loading services
 	"""

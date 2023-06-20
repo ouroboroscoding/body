@@ -23,6 +23,7 @@ setup(
 	python_requires='>=3.10',
 	install_requires=[
 		'bottle>=0.12.23,<0.13',
+		'jobject>=1.0.1,<1.1.0',
 		'jsonb>=1.0.0,<1.1.0',
 		'Memory-OC>=1.0.0,<1.1',
 		'Strings-OC>=1.0.0,<1.1'

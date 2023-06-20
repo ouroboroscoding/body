@@ -12,7 +12,7 @@ __created__		= "2022-08-29"
 # Python imports
 from time import sleep
 
-# PIP imports
+# Pip imports
 import jsonb
 import requests
 
@@ -34,20 +34,20 @@ Error = response.Error
 Response = response.Response
 ResponseException = response.ResponseException
 
-# Rest and RestConfig
+# REST and Config
 REST = rest.REST
-RESTConfig = config.RESTConfig
+Config = config.Config
 
 __services = {}
 """Registered Services"""
 
-__func_to_request = {
+__action_to_request = {
 	'create': [requests.post, 'POST'],
 	'delete': [requests.delete, 'DELETE'],
 	'read': [requests.get, 'GET'],
 	'update': [requests.put, 'PUT']
 }
-"""Map functions to REST types"""
+"""Map actions to request methods"""
 
 def create(service: str, path: str, req: dict = {}):
 	"""Create
@@ -134,9 +134,6 @@ def request(service: str, action: str, path: str, req: dict = {}):
 		Response
 	"""
 
-	# Generate the URL to reach the service
-	sURL = __services[service] + path
-
 	# Init the data and headers
 	sData = ''
 	dHeaders = {
@@ -155,12 +152,21 @@ def request(service: str, action: str, path: str, req: dict = {}):
 	if 'session' in req and req['session']:
 		dHeaders['Authorization'] = req['session'].id()
 
-	# Try to make the request and store the response
+	# Loop requests so we don't fail just because of a network glitch
 	iAttempts = 0
 	while True:
+
+		# Increase the attempts
 		iAttempts += 1
+
+		# Make the request using the services URL and the current path, then
+		#	store the response
 		try:
-			oRes = __func_to_request[action][0](sURL, data=sData, headers=dHeaders)
+			oRes = __action_to_request[action][0](
+				__services[service] + path,
+				data=sData,
+				headers=dHeaders
+			)
 
 			# If the request wasn't successful
 			if oRes.status_code != 200:
@@ -193,5 +199,5 @@ def request(service: str, action: str, path: str, req: dict = {}):
 			# We've tried enough, return an error
 			return Error(_errors.SERVICE_UNREACHABLE, str(e))
 
-	# Else turn the content into an Response and return it
+	# Else turn the content into a Response and return it
 	return Response.from_json(oRes.text)

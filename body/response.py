@@ -9,6 +9,9 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-15"
 
+# Pip imports
+import jsonb
+
 class Response(object):
 	"""Response
 
@@ -74,8 +77,36 @@ class Response(object):
 				raise ValueError('error')
 
 		# If there's a warning, store it as is
-		if not warning is None:
+		if warning is not None:
 			self.warning = warning
+
+	def __bool__(self):
+		"""bool
+
+		Python magic method to return a bool from the instance. In the case of
+		response, True is returned if there's data, else False
+
+		Returns:
+			boolean
+		"""
+		try: return self.data != None
+		except AttributeError: return False
+
+	def __contains__(self, name):
+		"""contains
+
+		Python magic method to return if a """
+
+	def __repr__(self):
+		"""repr
+
+		Python magic method to return a string from the instance that can be
+		turned back into the instance
+
+		Returns:
+			str
+		"""
+		return str(self.to_dict())
 
 	def __str__(self):
 		"""str
@@ -85,24 +116,7 @@ class Response(object):
 		Returns:
 			str
 		"""
-
-		# Create a temp dict
-		dRet = {}
-
-		# If there's data
-		try: dRet['data'] = self.data
-		except AttributeError: pass
-
-		# If there's an error
-		try: dRet['error'] = self.error
-		except AttributeError: pass
-
-		# If there's a warning
-		try: dRet['warning'] = self.warning
-		except AttributeError: pass
-
-		# Convert the dict to JSON and return it
-		return JSON.encode(dRet)
+		return str(self.to_dict())
 
 	def data_exists(self):
 		"""Data Exists
@@ -112,8 +126,7 @@ class Response(object):
 		Returns:
 			bool
 		"""
-		try: return self.data != None
-		except AttributeError: return False
+		return hasattr(self, 'data')
 
 	def error_exists(self):
 		"""Error Exists
@@ -123,8 +136,7 @@ class Response(object):
 		Returns:
 			bool
 		"""
-		try: return self.error != None
-		except AttributeError: return False
+		return hasattr(self, 'error')
 
 	@classmethod
 	def from_dict(cls, val):
@@ -142,17 +154,19 @@ class Response(object):
 		# Create a new instance
 		o = cls()
 
-		# If there's data
-		try: o.data = val['data']
-		except KeyError: pass
+		# If there's data (more likely to be there, so try/except)
+		try:
+			o.data = val['data']
+		except KeyError:
+			pass
 
-		# If there's an error
-		try: o.error = val['error']
-		except KeyError: pass
+		# If there's an error (less likely, use if/in)
+		if 'error' in val:
+			o.error = val['error']
 
-		# If there's a warning
-		try: o.warning = val['warning']
-		except KeyError: pass
+		# If there's a warning (less likely, use if/in)
+		if 'warning' in val:
+			o.warning = val['warning']
 
 		# Return the instance
 		return o
@@ -171,7 +185,7 @@ class Response(object):
 		"""
 
 		# Try to convert the string to a dict
-		try: d = JSON.decode(val)
+		try: d = jsonb.decode(val)
 		except ValueError as e: raise ValueError('val', str(e))
 		except TypeError as e: raise ValueError('val', str(e))
 
@@ -190,31 +204,42 @@ class Response(object):
 		# Init the return
 		dRet = {}
 
-		# Look for a data attribute
-		try: dRet['data'] = self.data
-		except AttributeError: pass
+		# Look for a data attribute (more likely to be there, so try/except)
+		try:
+			dRet['data'] = self.data
+		except AttributeError:
+			pass
 
-		# Look for an error attribute
-		try: dRet['error'] = self.error
-		except AttributeError: pass
+		# Look for an error attribute (less likely, use if/hasattr)
+		if hasattr(self, 'error'):
+			dRet['error'] = self.error
 
-		# Look for a warning attribute
-		try: dRet['warning'] = self.warning
-		except AttributeError: pass
+		# Look for a warning attribute (less likely, use if/hasattr)
+		if hasattr(self, 'warning'):
+			dRet['warning'] = self.warning
 
 		# Return the dict
 		return dRet
+
+	def to_json(self):
+		"""To JSON
+
+		Returns a JSON representation of the object
+
+		Returns:
+			str
+		"""
+		return jsonb.encode(self.to_dict())
 
 	def warning_exists(self):
 		"""Warning Exists
 
 		Returns True if there is a warning in the Response
 
-	Returns:
+		Returns:
 			bool
 		"""
-		try: return self.warning != None
-		except AttributeError: return False
+		return hasattr(self, 'warning')
 
 class Error(Response):
 	"""Error
@@ -244,13 +269,13 @@ class Error(Response):
 class ResponseException(Exception):
 	"""Response Exception
 
-	Stupid python won't let you raise anything that doesn't extend BaseException
+	Python won't let you raise anything that doesn't extend BaseException
 	"""
 
 	def __init__(self, data = None, error = None, warning = None):
 		"""Constructor
 
-		Dumb dumb python
+		Creates a new instance of the Exception
 
 		Arguments:
 			data (mixed): If a request returns data this should be set

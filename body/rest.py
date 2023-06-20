@@ -15,13 +15,14 @@ import re
 import sys
 import traceback
 
-# PIP imports
+# Pip imports
 import bottle
+import jobject
 import jsonb
 import memory
 
 # Local imports
-import errors, response, service
+from . import errors, response, service
 
 __action_to_method = {
 	'create': 'POST',
@@ -130,18 +131,18 @@ class __Route(object):
 		bottle.response.headers['Content-Type'] = 'application/json; charset=utf-8'
 
 		# Initialise the request details with the environment
-		dReq = {
+		dReq = jobject({
 			'environment': bottle.request.environ
-		}
+		})
 
 		# If we got a Read request and the data is in the GET
 		if bottle.request.method == 'GET' and 'd' in bottle.request.query:
 
 			# Convert the GET and store the data
 			try:
-				dReq['data'] = jsonb.decode(bottle.request.query['d'])
+				dReq.data = jsonb.decode(bottle.request.query['d'])
 			except Exception as e:
-				return str(response.Error((errors.REST_REQUEST_DATA, '%s\n%s' % (bottle.request.query['d'], str(e)))))
+				return response.Error((errors.REST_REQUEST_DATA, '%s\n%s' % (bottle.request.query['d'], str(e)))).to_json()
 
 		# Else we most likely got the data in the body
 		else:
@@ -151,37 +152,41 @@ class __Route(object):
 				if not __content_type.match(bottle.request.headers['Content-Type'].lower()):
 					return str(response.Error(errors.REST_CONTENT_TYPE))
 			except KeyError:
-				return str(response.Error(errors.REST_CONTENT_TYPE))
+				return response.Error(errors.REST_CONTENT_TYPE).to_json()
 
 			# Store the data, if it's too big we need to read it rather than
 			#	use getvalue
-			try: sData = bottle.request.body.getvalue()
-			except AttributeError as e: sData = bottle.request.body.read()
+			try:
+				sData = bottle.request.body.getvalue()
+			except AttributeError as e:
+				sData = bottle.request.body.read()
 
 			# Make sure we have a string, not a set of bytes
-			try: sData = sData.decode()
-			except (UnicodeDecodeError, AttributeError): pass
+			try:
+				sData = sData.decode()
+			except (UnicodeDecodeError, AttributeError):
+				pass
 
 			# Convert the data and store it
 			try:
-				if sData: dReq['data'] = jsonb.decode(sData)
+				if sData: dReq.data = jsonb.decode(sData)
 			except Exception as e:
-				return str(response.Error(errors.REST_REQUEST_DATA,'%s\n%s' % (sData, str(e))))
+				return response.Error(errors.REST_REQUEST_DATA,'%s\n%s' % (sData, str(e))).to_json()
 
-		# If the request should have sent a session, or one was sent anyway
+		# If the request sent a authorization token
 		if 'Authorization' in bottle.request.headers:
 
 			# Get the session from the Authorization token
-			dReq['session'] = memory.load(bottle.request.headers['Authorization'])
+			dReq.session = memory.load(bottle.request.headers['Authorization'])
 
 			# If the session is not found
-			if not dReq['session']:
+			if not dReq.session:
 				bottle.response.status = 401
-				return str(response.Error(errors.REST_AUTHORIZATION, 'Unauthorized'))
+				return response.Error(errors.REST_AUTHORIZATION, 'Unauthorized').to_json()
 
-			# Else, extend the session
+			# Else, extend the session's ttl
 			else:
-				dReq['session'].extend()
+				dReq.session.extend()
 
 		# In case the service crashes
 		try:
@@ -192,7 +197,7 @@ class __Route(object):
 		# If we got a KeyError
 		except KeyError as e:
 			if e.args[0] in self.__key_to_errors:
-				return str(response.Error(self.__key_to_errors[e.args[0]]))
+				return response.Error(self.__key_to_errors[e.args[0]]).to_json()
 			raise e
 
 		# If we get absolutely any exception
@@ -201,7 +206,7 @@ class __Route(object):
 			# Get the traceback info
 			sError = traceback.format_exc()
 
-			# Print the traceback to stderr so we log it
+			# Print the traceback to stderr
 			print(sError, file=sys.stderr)
 
 			# If we have an error handler
@@ -219,16 +224,16 @@ class __Route(object):
 					if s in dReq:
 						oDetails[s] = dReq[s]
 
-				# Call the error handler with the details
+				# Pass the details to the error handler
 				self.__on_error(oDetails)
 
-			# Set the response that the request crashed
+			# Set a response of service/request crashed
 			oResponse = response.Error(
 				errors.SERVICE_CRASHED,
 				'%s:%s' % (self.__service, bottle.request.path)
 			)
 
-		# If there's an error
+		# If the response contains an error
 		if oResponse.error_exists():
 
 			# If it's an authorization error
@@ -242,14 +247,16 @@ class __Route(object):
 					oResponse.error['msg'] = 'Unauthorized'
 
 			# Add the service and path to the call
-			try: oResponse.error['service'].append([self.service, self.path])
-			except KeyError: oResponse.error['service'] = [[self.service, self.path]]
+			try:
+				oResponse.error['service'].append([self.service, self.path])
+			except KeyError:
+				oResponse.error['service'] = [[self.service, self.path]]
 
 		# Return the Response as a string
-		return str(oResponse)
+		return oResponse.to_json()
 
-class RESTService(bottle.Bottle):
-	"""REST Service
+class REST(bottle.Bottle):
+	"""REST
 
 	Used to access a service instance via HTTP/REST
 

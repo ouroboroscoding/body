@@ -9,9 +9,34 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-15"
 
-class Service(object):
+# Python imports
+import abc
+
+class Service(abc.ABC):
 	"""Service
 
 	The object to build all services from
 	"""
-	pass
+
+	@abc.abstractmethod
+	def initialise(self):
+		"""Initialise
+
+		Called when the system is ready to go and all data has been loaded
+
+		Returns:
+			None
+		"""
+		raise NotImplementedError('Must implement the "initialise" method')
+
+	@abc.abstractmethod
+	def reset(self):
+		"""Reset
+
+		Called when the system has been reset, usually by loading new data that
+		the instance will need to process/reprocess
+
+		Returns:
+			None
+		"""
+		raise NotImplementedError('Must implement the "reset" method')
