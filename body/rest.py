@@ -286,7 +286,7 @@ class REST(bottle.Bottle):
 
 		# If the instance is not a Service
 		if not isinstance(service, service.Service):
-			raise ValueError('Invalis service passed to %s' %
+			raise ValueError('Invalid service passed to %s' %
 								sys._getframe().f_code.co_name)
 
 		# Store the service
