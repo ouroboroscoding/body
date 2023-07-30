@@ -24,25 +24,14 @@ import memory
 # Local imports
 from . import errors, response, service
 
-__action_to_method = {
-	'create': 'POST',
-	'delete': 'DELETE',
-	'read':   'GET',
-	'update': 'PUT'
-}
-"""Maps HTTP methods to service actions"""
-
-__content_type = re.compile(r'^application\/json; charset=utf-?8$')
-"""Valid Content-Type"""
-
-__noun_regex = re.compile(r'([a-z]+(?:_[a-z]+)*)_(create|delete|read|update)')
-"""Regular Expression to match to valid service noun method"""
-
-class __Route(object):
+class _Route(object):
 	"""Route
 
 	A private callable class used to store rest routes accessed by bottle
 	"""
+
+	__content_type = re.compile(r'^application\/json; charset=utf-?8$')
+	"""Valid Content-Type"""
 
 	__key_to_errors = {
 		'data': errors.SERVICE_NO_DATA,
@@ -149,7 +138,7 @@ class __Route(object):
 
 			# Make sure the request send JSON
 			try:
-				if not __content_type.match(bottle.request.headers['Content-Type'].lower()):
+				if not self.__content_type.match(bottle.request.headers['Content-Type'].lower()):
 					return str(response.Error(errors.REST_CONTENT_TYPE))
 			except KeyError:
 				return response.Error(errors.REST_CONTENT_TYPE).to_json()
@@ -248,9 +237,9 @@ class __Route(object):
 
 			# Add the service and path to the call
 			try:
-				oResponse.error['service'].append([self.service, self.path])
+				oResponse.error['service'].append([self.instance, self.path])
 			except KeyError:
-				oResponse.error['service'] = [[self.service, self.path]]
+				oResponse.error['service'] = [[self.instance, self.path]]
 
 		# Return the Response as a string
 		return oResponse.to_json()
@@ -264,17 +253,35 @@ class REST(bottle.Bottle):
 		Bottle
 	"""
 
-	def __init__(self, name: str, service: service.Service, cors: str = None, on_errors = None):
+	__action_to_method = {
+		'create': 'POST',
+		'delete': 'DELETE',
+		'read':   'GET',
+		'update': 'PUT'
+	}
+	"""Maps HTTP methods to service actions"""
+
+	__noun_regex = re.compile(
+		r'([a-z]+(?:_[a-z]+)*)_(create|delete|read|update)'
+	)
+	"""Regular Expression to match to valid service noun method"""
+
+	def __init__(self,
+		name: str,
+		instance: service.Service,
+		cors: str = None,
+		on_errors: callable = None
+	):
 		"""Constructor
 
-		Creates a new REST instances
+		Creates a new REST instance
 
 		Arguments:
 			name (str): The name of the service
-			service (Service): The service to make accessible via REST
-			cors (str): A regular expression defining what domains can access
+			instance (Service): The service to make accessible via REST
+			cors (str): A regular expression defining what domains can access \
 						the service
-			on_errors (callable): Optional, a function to call when a service
+			on_errors (callable): Optional, a function to call when a service \
 									request throws an exception
 
 		Raises:
@@ -284,35 +291,30 @@ class REST(bottle.Bottle):
 			RestService
 		"""
 
+		# Call the parent constructor first so the object is setup
+		super(REST, self).__init__()
+
 		# If the instance is not a Service
-		if not isinstance(service, service.Service):
+		if not isinstance(instance, service.Service):
 			raise ValueError('Invalid service passed to %s' %
 								sys._getframe().f_code.co_name)
 
 		# Store the service
-		self.service = service
+		self.instance = instance
 
 		# If cors, compile it
 		if cors:
 			cors = re.compile(cors)
 
-		# Init the urls to functions
-		self.__urls = {
-			'DELETE': {},
-			'GET': {},
-			'POST': {},
-			'PUT': {}
-		}
-
 		# Set the service name
-		__Route.service(name)
+		_Route.service(name)
 
 		# If we have an error handler
 		if on_errors:
-			__Route.on_error(on_errors)
+			_Route.on_error(on_errors)
 
 		# Go through all the functions found on the service
-		for sFunc in dir(self.service):
+		for sFunc in dir(self.instance):
 
 			# Check the format of the method name
 			oMatch = self.__noun_regex.match(sFunc)
@@ -321,7 +323,7 @@ class REST(bottle.Bottle):
 			if oMatch:
 
 				# Get the method
-				sMethod = __action_to_method[oMatch.group(2)]
+				sMethod = self.__action_to_method[oMatch.group(2)]
 
 				# Generate the URL
 				sUri = '/' + ('/'.join(oMatch.group(1).split('_')))
@@ -330,8 +332,8 @@ class REST(bottle.Bottle):
 				self.route(
 					sUri,
 					sMethod,
-					__Route(
-						getattr(self.service, sFunc),	# The function to call
+					_Route(
+						getattr(self.instance, sFunc),	# The function to call
 						cors							# Optional CORS regex
 					)
 				)

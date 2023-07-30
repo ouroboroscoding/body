@@ -9,6 +9,11 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2022-08-29"
 
+__all__ = [
+	'Config', 'constants', 'Error', 'errors', 'regex', 'Response',
+	'ResponseException', 'REST', 'Service'
+]
+
 # Python imports
 from time import sleep
 
@@ -18,16 +23,12 @@ import requests
 
 # Local imports
 from . import	config, \
-				constants as _constants, \
-				errors as _errors, \
-				regex as _regex, \
+				constants, \
+				errors, \
+				regex, \
 				response, \
-				rest
-
-# Constant variables
-constants = _constants
-errors = _errors
-regex = _regex
+				rest, \
+				service
 
 # Error, Response, and ResponseException
 Error = response.Error
@@ -37,6 +38,9 @@ ResponseException = response.ResponseException
 # REST and Config
 REST = rest.REST
 Config = config.Config
+
+# Service
+Service = service.Service
 
 __services = {}
 """Registered Services"""
@@ -175,11 +179,11 @@ def request(service: str, action: str, path: str, req: dict = {}):
 				if oRes.status_code == 401:
 					return Response.from_json(oRes.content)
 				else:
-					return Error(_errors.SERVICE_STATUS, '%d: %s' % (oRes.status_code, oRes.content))
+					return Error(errors.SERVICE_STATUS, '%d: %s' % (oRes.status_code, oRes.content))
 
 			# If we got the wrong content type
 			if oRes.headers['Content-Type'].lower() != 'application/json; charset=utf-8':
-				return Error(_errors.SERVICE_CONTENT_TYPE, '%s' % oRes.headers['content-type'])
+				return Error(errors.SERVICE_CONTENT_TYPE, '%s' % oRes.headers['content-type'])
 
 			# Success, break out of the loop
 			break
@@ -197,7 +201,7 @@ def request(service: str, action: str, path: str, req: dict = {}):
 				continue
 
 			# We've tried enough, return an error
-			return Error(_errors.SERVICE_UNREACHABLE, str(e))
+			return Error(errors.SERVICE_UNREACHABLE, str(e))
 
 	# Else turn the content into a Response and return it
 	return Response.from_json(oRes.text)

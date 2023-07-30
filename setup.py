@@ -26,7 +26,8 @@ setup(
 		'jobject>=1.0.1,<1.1.0',
 		'jsonb>=1.0.0,<1.1.0',
 		'Memory-OC>=1.0.0,<1.1',
-		'Strings-OC>=1.0.0,<1.1'
+		'Strings-OC>=1.0.0,<1.1',
+		'requests>=2.31.0,<2.32'
 	],
 	zip_safe=True
 )
