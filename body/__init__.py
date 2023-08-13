@@ -15,6 +15,7 @@ __all__ = [
 ]
 
 # Python imports
+from sys import stderr
 from time import sleep
 
 # Pip imports
@@ -101,14 +102,15 @@ def read(service: str, path: str, req: dict = {}):
 	"""
 	return request(service, 'read', path, req)
 
-def register(conf: dict):
+def register(running: dict, rest_conf: 'Config'):
 	"""Register
 
 	Takes a dictionary of services to their urls for use by the request
 	functions
 
 	Arguments:
-		conf (dict): Configuration variables for remote services
+		running (dict): Dict of local running services
+		rest_conf (Config): Configuration for remote services
 
 	Returns:
 		None
@@ -117,8 +119,19 @@ def register(conf: dict):
 	# Pull in the global services
 	global __services
 
-	# Store the urls by service
-	__services = { k: v['url'] for k,v in conf.items() }
+	# Rest the dict
+	__services = {}
+
+	# Go through each config
+	for s in rest_conf:
+
+		# If the service exists locally
+		if s in running:
+			__services[s] = running[s]
+
+		# Else, add the URL
+		else:
+			__services[s] = rest_conf[s]['url']
 
 def request(service: str, action: str, path: str, req: dict = {}):
 	"""Request
@@ -163,45 +176,52 @@ def request(service: str, action: str, path: str, req: dict = {}):
 		# Increase the attempts
 		iAttempts += 1
 
-		# Make the request using the services URL and the current path, then
-		#	store the response
-		try:
-			oRes = __action_to_request[action][0](
-				__services[service] + path,
-				data=sData,
-				headers=dHeaders
-			)
+		# If we got a service instance
+		if isinstance(__services[service], Service):
+			print('Can not currently call local services', file=stderr)
 
-			# If the request wasn't successful
-			if oRes.status_code != 200:
+		# Else, this is an external service
+		else:
 
-				# If we got a 401
-				if oRes.status_code == 401:
-					return Response.from_json(oRes.content)
-				else:
-					return Error(errors.SERVICE_STATUS, '%d: %s' % (oRes.status_code, oRes.content))
+			# Make the request using the services URL and the current path, then
+			#	store the response
+			try:
+				oRes = __action_to_request[action][0](
+					__services[service] + path,
+					data=sData,
+					headers=dHeaders
+				)
 
-			# If we got the wrong content type
-			if oRes.headers['Content-Type'].lower() != 'application/json; charset=utf-8':
-				return Error(errors.SERVICE_CONTENT_TYPE, '%s' % oRes.headers['content-type'])
+				# If the request wasn't successful
+				if oRes.status_code != 200:
 
-			# Success, break out of the loop
-			break
+					# If we got a 401
+					if oRes.status_code == 401:
+						return Response.from_json(oRes.content)
+					else:
+						return Error(errors.SERVICE_STATUS, '%d: %s' % (oRes.status_code, oRes.content))
 
-		# If we couldn't connect to the service
-		except requests.ConnectionError as e:
+				# If we got the wrong content type
+				if oRes.headers['Content-Type'].lower() != 'application/json; charset=utf-8':
+					return Error(errors.SERVICE_CONTENT_TYPE, '%s' % oRes.headers['content-type'])
 
-			# If we haven't exhausted attempts
-			if iAttempts < 3:
+				# Success, break out of the loop
+				break
 
-				# Wait for a second
-				sleep(1)
+			# If we couldn't connect to the service
+			except requests.ConnectionError as e:
 
-				# Loop back around
-				continue
+				# If we haven't exhausted attempts
+				if iAttempts < 3:
 
-			# We've tried enough, return an error
-			return Error(errors.SERVICE_UNREACHABLE, str(e))
+					# Wait for a second
+					sleep(1)
+
+					# Loop back around
+					continue
+
+				# We've tried enough, return an error
+				return Error(errors.SERVICE_UNREACHABLE, str(e))
 
 	# Else turn the content into a Response and return it
 	return Response.from_json(oRes.text)

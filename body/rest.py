@@ -11,13 +11,14 @@ __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-17"
 
 # Python imports
+from datetime import datetime
 import re
 import sys
 import traceback
 
 # Pip imports
 import bottle
-import jobject
+from jobject import jobject
 import jsonb
 import memory
 
@@ -48,6 +49,9 @@ class _Route(object):
 	__service = ''
 	"""The service's name"""
 
+	__verbose = False
+	"""The verbose mode, set to True to view requests/responses"""
+
 	@classmethod
 	def on_error(cls, callback: callable):
 		"""On Error
@@ -60,7 +64,7 @@ class _Route(object):
 		Returns:
 			None
 		"""
-		cls.__on_error = callback
+		cls.__on_error = staticmethod(callback)
 
 	@classmethod
 	def service(cls, s: str):
@@ -76,7 +80,23 @@ class _Route(object):
 		"""
 		cls.__service = s
 
-	def __init__(self, callback: callable, cors: re.Pattern = None):
+	@classmethod
+	def verbose(cls, b: bool):
+		"""Verbose
+
+		Set the verbose mode associated with all routes
+
+		Arguments:
+			b (bool): True/False
+
+		Returns:
+			None
+		"""
+		cls.__verbose = b
+
+	def __init__(self,
+		callback: callable,
+		cors: re.Pattern = None):
 		"""Constructor
 
 		Initialises an instance of the route
@@ -108,6 +128,13 @@ class _Route(object):
 
 		# If the request is OPTIONS, set the headers and return nothing
 		if bottle.request.method == 'OPTIONS':
+			if self.__verbose:
+				print('%s: %s OPTIONS %s' % (
+					str(datetime.now()),
+					self.__service,
+					bottle.request.path
+				))
+
 			bottle.response.headers['Access-Control-Allow-Methods'] = 'DELETE, GET, POST, PUT, OPTIONS'
 			bottle.response.headers['Access-Control-Max-Age'] = 1728000
 			bottle.response.headers['Access-Control-Allow-Headers'] = 'Authorization,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type'
@@ -120,7 +147,7 @@ class _Route(object):
 		bottle.response.headers['Content-Type'] = 'application/json; charset=utf-8'
 
 		# Initialise the request details with the environment
-		dReq = jobject({
+		oReq = jobject({
 			'environment': bottle.request.environ
 		})
 
@@ -129,7 +156,7 @@ class _Route(object):
 
 			# Convert the GET and store the data
 			try:
-				dReq.data = jsonb.decode(bottle.request.query['d'])
+				oReq.data = jsonb.decode(bottle.request.query['d'])
 			except Exception as e:
 				return response.Error((errors.REST_REQUEST_DATA, '%s\n%s' % (bottle.request.query['d'], str(e)))).to_json()
 
@@ -158,7 +185,7 @@ class _Route(object):
 
 			# Convert the data and store it
 			try:
-				if sData: dReq.data = jsonb.decode(sData)
+				if sData: oReq.data = jsonb.decode(sData)
 			except Exception as e:
 				return response.Error(errors.REST_REQUEST_DATA,'%s\n%s' % (sData, str(e))).to_json()
 
@@ -166,28 +193,46 @@ class _Route(object):
 		if 'Authorization' in bottle.request.headers:
 
 			# Get the session from the Authorization token
-			dReq.session = memory.load(bottle.request.headers['Authorization'])
+			oReq.session = memory.load(bottle.request.headers['Authorization'])
 
 			# If the session is not found
-			if not dReq.session:
+			if not oReq.session:
 				bottle.response.status = 401
 				return response.Error(errors.REST_AUTHORIZATION, 'Unauthorized').to_json()
 
 			# Else, extend the session's ttl
 			else:
-				dReq.session.extend()
+				oReq.session.extend()
 
 		# In case the service crashes
 		try:
 
-			# Call the appropriate API method based on the HTTP/request method
-			self.__callback(dReq)
+			# If we're in verbose mode
+			if self.__verbose:
+				print('%s REQUEST %s %s %s %s' % (
+					str(datetime.now()),
+					self.__service,
+					bottle.request.method,
+					bottle.request.path,
+					str('data' in oReq and jsonb.encode(oReq.data, 2) or 'None')
+				))
 
-		# If we got a KeyError
-		except KeyError as e:
-			if e.args[0] in self.__key_to_errors:
-				return response.Error(self.__key_to_errors[e.args[0]]).to_json()
-			raise e
+			# Call the appropriate API method based on the HTTP/request method
+			try:
+				oResponse = self.__callback(oReq)
+
+			# If we got a KeyError
+			except (AttributeError, KeyError) as e:
+				if e.args[0] in self.__key_to_errors:
+					oResponse = response.Error(self.__key_to_errors[e.args[0]])
+				else:
+					raise
+
+			# If we got a response exception
+			except response.ResponseException as e:
+
+				# Set the response using the exceptions first argument
+				oResponse = e.args[0]
 
 		# If we get absolutely any exception
 		except Exception as e:
@@ -206,12 +251,12 @@ class _Route(object):
 					'service': self.__service,
 					'method': bottle.request.method,
 					'path': bottle.request.path,
-					'environment': dReq['environment'],
+					'environment': oReq.environment,
 					'traceback': sError
 				}
 				for s in ['data', 'session']:
-					if s in dReq:
-						oDetails[s] = dReq[s]
+					if s in oReq:
+						oDetails[s] = oReq[s]
 
 				# Pass the details to the error handler
 				self.__on_error(oDetails)
@@ -237,9 +282,24 @@ class _Route(object):
 
 			# Add the service and path to the call
 			try:
-				oResponse.error['service'].append([self.instance, self.path])
+				oResponse.error['service'].append([
+					self.__service, bottle.request.method, bottle.request.path
+				])
 			except KeyError:
-				oResponse.error['service'] = [[self.instance, self.path]]
+				oResponse.error['service'] = [
+					[self.__service, bottle.request.method, bottle.request.path]
+				]
+
+		# If we're in verbose mode
+		if self.__verbose:
+			print('%s RETURNING %s %s %s %s' % (
+				str(datetime.now()),
+				self.__service,
+				bottle.request.method,
+				bottle.request.path,
+				jsonb.encode(oResponse.to_dict(), 2)
+			)
+		)
 
 		# Return the Response as a string
 		return oResponse.to_json()
@@ -270,7 +330,8 @@ class REST(bottle.Bottle):
 		name: str,
 		instance: service.Service,
 		cors: str = None,
-		on_errors: callable = None
+		on_errors: callable = None,
+		verbose: bool = False
 	):
 		"""Constructor
 
@@ -312,6 +373,9 @@ class REST(bottle.Bottle):
 		# If we have an error handler
 		if on_errors:
 			_Route.on_error(on_errors)
+
+		# Set the verbose mode
+		_Route.verbose(verbose)
 
 		# Go through all the functions found on the service
 		for sFunc in dir(self.instance):
