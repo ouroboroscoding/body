@@ -28,7 +28,8 @@ setup(
 		'jsonb>=1.0.0,<1.1.0',
 		'Memory-OC>=1.0.0,<1.1',
 		'Strings-OC>=1.0.0,<1.1',
-		'requests>=2.31.0,<2.32'
+		'requests>=2.31.0,<2.32',
+		'undefined-oc>=1.0.0,<1.1'
 	],
 	zip_safe=True
 )

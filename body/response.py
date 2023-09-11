@@ -9,8 +9,9 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-15"
 
-# Pip imports
+# Ouroboros imports
 import jsonb
+import undefined
 
 class Response(object):
 	"""Response
@@ -18,7 +19,11 @@ class Response(object):
 	Represents a standard result from any/all requests
 	"""
 
-	def __init__(self, data = None, error = None, warning = None):
+	def __init__(self,
+		data: any = undefined,
+		error: any = undefined,
+		warning: any = undefined
+	):
 		"""Constructor
 
 		Initialises a new Response instance
@@ -37,11 +42,11 @@ class Response(object):
 		"""
 
 		# If there's data, store it as is
-		if data is not None:
+		if data is not undefined:
 			self.data = data
 
 		# If there's an error, figure out what type
-		if error is not None:
+		if error is not undefined:
 
 			# If we got an int, it's a code with no message string
 			if isinstance(error, int):
@@ -77,7 +82,7 @@ class Response(object):
 				raise ValueError('error')
 
 		# If there's a warning, store it as is
-		if warning is not None:
+		if warning is not undefined:
 			self.warning = warning
 
 	def __bool__(self):
@@ -272,7 +277,11 @@ class ResponseException(Exception):
 	Python won't let you raise anything that doesn't extend BaseException
 	"""
 
-	def __init__(self, data = None, error = None, warning = None):
+	def __init__(self,
+		data: any = undefined,
+		error: any = undefined,
+		warning: any = undefined
+	):
 		"""Constructor
 
 		Creates a new instance of the Exception
