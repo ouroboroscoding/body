@@ -14,12 +14,16 @@ __all__ = [
 	'ResponseException', 'REST', 'Service'
 ]
 
+# Ouroboros imports
+import jsonb
+import undefined
+
 # Python imports
+from copy import copy
 from sys import stderr
 from time import sleep
 
 # Pip imports
-import jsonb
 import requests
 
 # Local imports
@@ -54,7 +58,12 @@ __action_to_request = {
 }
 """Map actions to request methods"""
 
-def create(service: str, path: str, req: dict = {}):
+def create(
+	service: str,
+	path: str,
+	req: dict = {},
+	headers: dict = undefined
+):
 	"""Create
 
 	Make a POST request
@@ -62,15 +71,20 @@ def create(service: str, path: str, req: dict = {}):
 	Arguments:
 		service (str): The service to call
 		path (str): The path on the service
-		req (dict): The request details, which can include 'data',
-					'environment', and 'session'
+		req (dict): The request details, which can include 'data' and 'session'
+		headers (dict): Any additional headers to add to the request
 
 	Returns:
 		Response
 	"""
-	return request(service, 'create', path, req)
+	return request(service, 'create', path, req, headers)
 
-def delete(service: str, path: str, req: dict = {}):
+def delete(
+	service: str,
+	path: str,
+	req: dict = {},
+	headers: dict = undefined
+):
 	"""Delete
 
 	Make a DELETE request
@@ -78,15 +92,20 @@ def delete(service: str, path: str, req: dict = {}):
 	Arguments:
 		service (str): The service to call
 		path (str): The path on the service
-		req (dict): The request details, which can include 'data',
-					'environment', and 'session'
+		req (dict): The request details, which can include 'data' and 'session'
+		headers (dict): Any additional headers to add to the request
 
 	Returns:
 		Response
 	"""
-	return request(service, 'delete', path, req)
+	return request(service, 'delete', path, req, headers)
 
-def read(service: str, path: str, req: dict = {}):
+def read(
+	service: str,
+	path: str,
+	req: dict = {},
+	headers: dict = undefined
+):
 	"""Read
 
 	Make a GET request
@@ -94,13 +113,13 @@ def read(service: str, path: str, req: dict = {}):
 	Arguments:
 		service (str): The service to call
 		path (str): The path on the service
-		req (dict): The request details, which can include 'data',
-					'environment', and 'session'
+		req (dict): The request details, which can include 'data' and 'session'
+		headers (dict): Any additional headers to add to the request
 
 	Returns:
 		Response
 	"""
-	return request(service, 'read', path, req)
+	return request(service, 'read', path, req, headers)
 
 def register(running: dict, rest_conf: 'Config'):
 	"""Register
@@ -133,7 +152,13 @@ def register(running: dict, rest_conf: 'Config'):
 		else:
 			__services[s] = rest_conf[s]['url']
 
-def request(service: str, action: str, path: str, req: dict = {}):
+def request(
+	service: str,
+	action: str,
+	path: str,
+	req: dict = {},
+	headers: dict = undefined
+):
 	"""Request
 
 	Method to convert REST requests into HTTP requests
@@ -143,6 +168,7 @@ def request(service: str, action: str, path: str, req: dict = {}):
 		action (str): The action to take on the service
 		path (str): The path of the request
 		req (dict): The request details: 'data', 'session', and 'enviroment'
+		headers (dict): Any additional headers to add to the request
 
 	Raises:
 		KeyError: if the service or action don't exist
@@ -153,10 +179,13 @@ def request(service: str, action: str, path: str, req: dict = {}):
 
 	# Init the data and headers
 	sData = ''
-	dHeaders = {
-		'Content-Length': '0',
-		'Content-Type': 'application/json; charset=utf-8'
-	}
+	dHeaders = (headers is not undefined and isinstance(headers, dict)) and \
+				copy(headers) or \
+				{}
+
+	# Add the default content length and type
+	dHeaders['Content-Length'] = '0'
+	dHeaders['Content-Type'] = 'application/json; charset=utf-8'
 
 	# If the data was passed
 	if 'data' in req and req['data']:
@@ -199,11 +228,18 @@ def request(service: str, action: str, path: str, req: dict = {}):
 					if oRes.status_code == 401:
 						return Response.from_json(oRes.content)
 					else:
-						return Error(errors.SERVICE_STATUS, '%d: %s' % (oRes.status_code, oRes.content))
+						return Error(
+							errors.SERVICE_STATUS,
+							'%d: %s' % (oRes.status_code, oRes.content)
+						)
 
 				# If we got the wrong content type
-				if oRes.headers['Content-Type'].lower() != 'application/json; charset=utf-8':
-					return Error(errors.SERVICE_CONTENT_TYPE, '%s' % oRes.headers['content-type'])
+				if oRes.headers['Content-Type'].lower() != \
+					'application/json; charset=utf-8':
+					return Error(
+						errors.SERVICE_CONTENT_TYPE,
+						'%s' % oRes.headers['content-type']
+					)
 
 				# Success, break out of the loop
 				break
@@ -225,3 +261,24 @@ def request(service: str, action: str, path: str, req: dict = {}):
 
 	# Else turn the content into a Response and return it
 	return Response.from_json(oRes.text)
+
+def update(
+	service: str,
+	path: str,
+	req: dict = {},
+	headers: dict = undefined
+):
+	"""Update
+
+	Make a PUT request
+
+	Arguments:
+		service (str): The service to call
+		path (str): The path on the service
+		req (dict): The request details, which can include 'data' and 'session'
+		headers (dict): Any additional headers to add to the request
+
+	Returns:
+		Response
+	"""
+	return request(service, 'update', path, req, headers)

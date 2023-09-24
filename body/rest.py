@@ -10,6 +10,9 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-17"
 
+# Limit exports
+__all__ = ['bottle', 'REST']
+
 # Python imports
 from datetime import datetime
 import re
@@ -102,8 +105,8 @@ class _Route(object):
 		Initialises an instance of the route
 
 		Arguments:
-			callback (callable): The function to pass details to when this route
-									is triggered
+			callback (callable): The function to pass details to when this \
+				route is triggered
 			cors (re.Pattern): Optional, CORS values
 
 		Returns:
@@ -122,12 +125,19 @@ class _Route(object):
 		"""
 
 		# If CORS is enabled and the origin matches
-		if self.__cors and 'origin' in bottle.request.headers and self.__cors.match(bottle.request.headers['origin']):
-			bottle.response.headers['Access-Control-Allow-Origin'] = bottle.request.headers['origin']
+		if self.__cors and \
+			'origin' in bottle.request.headers and \
+			self.__cors.match(bottle.request.headers['origin']):
+
+			# Add the current origin as acceptable
+			bottle.response.headers['Access-Control-Allow-Origin'] = \
+				bottle.request.headers['origin']
 			bottle.response.headers['Vary'] = 'Origin'
 
-		# If the request is OPTIONS, set the headers and return nothing
+		# If the request is OPTIONS
 		if bottle.request.method == 'OPTIONS':
+
+			# If we're in verbose mode, let people know we are handling OPTIONS
 			if self.__verbose:
 				print('%s: %s OPTIONS %s' % (
 					str(datetime.now()),
@@ -135,20 +145,27 @@ class _Route(object):
 					bottle.request.path
 				))
 
-			bottle.response.headers['Access-Control-Allow-Methods'] = 'DELETE, GET, POST, PUT, OPTIONS'
+			# Set the default headers expected for OPTIONS
+			bottle.response.headers['Access-Control-Allow-Methods'] = \
+				'DELETE, GET, POST, PUT, OPTIONS'
 			bottle.response.headers['Access-Control-Max-Age'] = 1728000
-			bottle.response.headers['Access-Control-Allow-Headers'] = 'Authorization,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type'
+			bottle.response.headers['Access-Control-Allow-Headers'] = \
+				'Authorization,DNT,X-CustomHeader,Keep-Alive,User-Agent,' \
+				'X-Requested-With,If-Modified-Since,Cache-Control,Content-Type'
 			bottle.response.headers['Content-Type'] = 'text/plain charset=UTF-8'
 			bottle.response.headers['Content-Length'] = 0
 			bottle.request.status = 204
 			return ''
 
 		# Set the return to JSON
-		bottle.response.headers['Content-Type'] = 'application/json; charset=utf-8'
+		bottle.response.headers['Content-Type'] = \
+			'application/json; charset=utf-8'
 
-		# Initialise the request details with the environment
+		# Initialise the request details with the bottle request and response
+		#	objects, allowing requests direct access to low level data
 		oReq = jobject({
-			'environment': bottle.request.environ
+			'request': bottle.request,
+			'response': bottle.response
 		})
 
 		# If we got a Read request and the data is in the GET
@@ -251,7 +268,7 @@ class _Route(object):
 					'service': self.__service,
 					'method': bottle.request.method,
 					'path': bottle.request.path,
-					'environment': oReq.environment,
+					'environment': bottle.request.environment,
 					'traceback': sError
 				}
 				for s in ['data', 'session']:

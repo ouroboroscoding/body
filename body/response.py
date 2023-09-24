@@ -79,7 +79,7 @@ class Response(object):
 
 			# Else, we got something invalid
 			else:
-				raise ValueError('error')
+				raise ValueError('error', 'invalid value: %s' % str(error))
 
 		# If there's a warning, store it as is
 		if warning is not undefined:
@@ -96,11 +96,6 @@ class Response(object):
 		"""
 		try: return self.data != None
 		except AttributeError: return False
-
-	def __contains__(self, name):
-		"""contains
-
-		Python magic method to return if a """
 
 	def __repr__(self):
 		"""repr
