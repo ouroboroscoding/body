@@ -10,11 +10,14 @@ __version__ = "1.0.0"
 __email__ = "chris@ouroboroscoding.com"
 __created__ = "2022-08-29"
 
+# Ouroboros imports
+from config import config
+
 # Python imports
 from pprint import pformat
 
 # Pip imports
-from RestOC import Conf, EMail
+from RestOC import EMail
 
 RIGHTS = 1000
 """Rights insufficient or missing"""
@@ -49,7 +52,7 @@ def service_error(error):
 	"""
 
 	# If we don't send out errors
-	if(not Conf.get(('services', 'send_error_emails'))):
+	if not config.services.send_error_emails(True):
 		return True
 
 	# Generate a list of the individual parts of the error
