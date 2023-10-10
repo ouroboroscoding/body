@@ -10,11 +10,12 @@ __email__		= "chris@ouroboroscoding.com"
 __created__		= "2022-08-29"
 
 __all__ = [
-	'Config', 'constants', 'Error', 'errors', 'regex', 'Response',
+	'constants', 'Error', 'errors', 'regex', 'register_services', 'Response',
 	'ResponseException', 'REST', 'Service'
 ]
 
 # Ouroboros imports
+from config import config
 import jsonb
 import undefined
 
@@ -27,9 +28,9 @@ from time import sleep
 import requests
 
 # Local imports
-from . import	config, \
-				constants, \
+from . import	constants, \
 				errors, \
+				locations, \
 				regex, \
 				response, \
 				rest, \
@@ -42,7 +43,7 @@ ResponseException = response.ResponseException
 
 # REST and Config
 REST = rest.REST
-Config = config.Config
+Locations = locations.Locations
 
 # Service
 Service = service.Service
@@ -121,28 +122,39 @@ def read(
 	"""
 	return request(service, 'read', path, req, headers)
 
-def register(running: dict, rest_conf: 'Config'):
-	"""Register
+def register_services(running: dict) -> Locations:
+	"""Register Services
 
 	Takes a dictionary of services to their urls for use by the request
 	functions
 
 	Arguments:
 		running (dict): Dict of local running services
-		rest_conf (Config): Configuration for remote services
 
 	Returns:
-		None
+		body.locations.Locations
 	"""
 
 	# Pull in the global services
 	global __services
 
+	# Init the REST config
+	oLocations = Locations(config.body.rest({
+		'allowed': None,
+		'default': {
+			'domain': 'localhost',
+			'host': '0.0.0.0',
+			'port': 9000,
+			'protocol': 'http',
+			'workers': 1
+		}
+	}))
+
 	# Rest the dict
 	__services = {}
 
 	# Go through each config
-	for s in rest_conf:
+	for s in oLocations:
 
 		# If the service exists locally
 		if s in running:
@@ -150,7 +162,10 @@ def register(running: dict, rest_conf: 'Config'):
 
 		# Else, add the URL
 		else:
-			__services[s] = rest_conf[s]['url']
+			__services[s] = oLocations[s]['url']
+
+	# Return the config
+	return oLocations
 
 def request(
 	service: str,

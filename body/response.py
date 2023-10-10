@@ -41,9 +41,8 @@ class Response(object):
 			Response
 		"""
 
-		# If there's data, store it as is
-		if data is not undefined:
-			self.data = data
+		# If there's no data, set None, else use the data
+		self.data = data is not undefined and data or None
 
 		# If there's an error, figure out what type
 		if error is not undefined:
@@ -80,6 +79,10 @@ class Response(object):
 			# Else, we got something invalid
 			else:
 				raise ValueError('error', 'invalid value: %s' % str(error))
+
+		# Else, set it to False
+		else:
+			self.error = False
 
 		# If there's a warning, store it as is
 		if warning is not undefined:
@@ -118,26 +121,6 @@ class Response(object):
 		"""
 		return str(self.to_dict())
 
-	def data_exists(self):
-		"""Data Exists
-
-		Returns True if there is data in the Response
-
-		Returns:
-			bool
-		"""
-		return hasattr(self, 'data')
-
-	def error_exists(self):
-		"""Error Exists
-
-		Returns True if there is an error in the Response
-
-		Returns:
-			bool
-		"""
-		return hasattr(self, 'error')
-
 	@classmethod
 	def from_dict(cls, val):
 		"""From Dict
@@ -158,11 +141,13 @@ class Response(object):
 		try:
 			o.data = val['data']
 		except KeyError:
-			pass
+			o.data = None
 
 		# If there's an error (less likely, use if/in)
 		if 'error' in val:
 			o.error = val['error']
+		else:
+			o.error = False
 
 		# If there's a warning (less likely, use if/in)
 		if 'warning' in val:
@@ -204,14 +189,12 @@ class Response(object):
 		# Init the return
 		dRet = {}
 
-		# Look for a data attribute (more likely to be there, so try/except)
-		try:
+		# Set the data key if it's set in the instance
+		if self.data is not None:
 			dRet['data'] = self.data
-		except AttributeError:
-			pass
 
-		# Look for an error attribute (less likely, use if/hasattr)
-		if hasattr(self, 'error'):
+		# If the error is not set to False
+		if self.error is not False:
 			dRet['error'] = self.error
 
 		# Look for a warning attribute (less likely, use if/hasattr)

@@ -1,7 +1,7 @@
 # coding=utf8
-"""Config
+"""Locations
 
-Configuration for loading and accessing REST services
+Configuration for accessing REST services via http
 """
 
 __author__		= "Chris Nasr"
@@ -9,8 +9,8 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-17"
 
-class Config(object):
-	"""Config class
+class Locations(object):
+	"""Locations class
 
 	Represents configuration data for connecting to/loading services
 	"""
@@ -61,7 +61,7 @@ class Config(object):
 				services
 
 		Returns:
-			Config
+			Locations
 		"""
 
 		# If we didn't get a dictionary for the service conf
