@@ -268,7 +268,7 @@ class _Route(object):
 					'service': self.__service,
 					'method': bottle.request.method,
 					'path': bottle.request.path,
-					'environment': bottle.request.environment,
+					'environment': bottle.request.environ,
 					'traceback': sError
 				}
 				for s in ['data', 'session']:
@@ -285,7 +285,7 @@ class _Route(object):
 			)
 
 		# If the response contains an error
-		if oResponse.error_exists():
+		if oResponse.error:
 
 			# If it's an authorization error
 			if oResponse.error['code'] == errors.REST_AUTHORIZATION:

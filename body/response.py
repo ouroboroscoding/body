@@ -243,6 +243,9 @@ class Error(Response):
 			Error
 		"""
 
+		# Set the data to None
+		self.data = None
+
 		# Set the error code
 		self.error = {
 			'code': code,

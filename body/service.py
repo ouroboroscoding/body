@@ -19,17 +19,6 @@ class Service(abc.ABC):
 	"""
 
 	@abc.abstractmethod
-	def initialise(self):
-		"""Initialise
-
-		Called when the system is ready to go and all data has been loaded
-
-		Returns:
-			None
-		"""
-		raise NotImplementedError('Must implement the "initialise" method')
-
-	@abc.abstractmethod
 	def reset(self):
 		"""Reset
 
