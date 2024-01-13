@@ -13,17 +13,20 @@ __created__		= "2023-03-17"
 # Limit exports
 __all__ = ['bottle', 'REST']
 
+# Ouroboros imports
+from jobject import jobject
+import jsonb
+import memory
+
 # Python imports
 from datetime import datetime
 import re
 import sys
 import traceback
+from typing import List
 
 # Pip imports
 import bottle
-from jobject import jobject
-import jsonb
-import memory
 
 # Local imports
 from . import errors, response, service
@@ -52,7 +55,7 @@ class _Route(object):
 	__service = ''
 	"""The service's name"""
 
-	__verbose = False
+	__verbose = True
 	"""The verbose mode, set to True to view requests/responses"""
 
 	@classmethod
@@ -346,7 +349,7 @@ class REST(bottle.Bottle):
 	def __init__(self,
 		name: str,
 		instance: service.Service,
-		cors: str = None,
+		cors: List[str] = None,
 		on_errors: callable = None,
 		verbose: bool = False
 	):
@@ -357,8 +360,7 @@ class REST(bottle.Bottle):
 		Arguments:
 			name (str): The name of the service
 			instance (Service): The service to make accessible via REST
-			cors (str): A regular expression defining what domains can access \
-						the service
+			cors (str[]): A list of allowed domains for CORS policy
 			on_errors (callable): Optional, a function to call when a service \
 									request throws an exception
 
@@ -382,7 +384,13 @@ class REST(bottle.Bottle):
 
 		# If cors, compile it
 		if cors:
-			cors = re.compile(cors)
+
+			# If we only have one
+			if len(cors) == 1:
+				cors = cors[0].replace('.', '\\.')
+			else:
+				cors = '(?:%s)' % '|'.join([ s.replace('.', '\\.') for s in cors ])
+			cors = re.compile('https?://(.*\\.)?%s' % cors)
 
 		# Set the service name
 		_Route.service(name)
@@ -412,7 +420,7 @@ class REST(bottle.Bottle):
 				# Register it with bottle
 				self.route(
 					sUri,
-					sMethod,
+					[ sMethod, 'OPTIONS' ],
 					_Route(
 						getattr(self.instance, sFunc),	# The function to call
 						cors							# Optional CORS regex

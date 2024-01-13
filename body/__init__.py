@@ -122,14 +122,14 @@ def read(
 	"""
 	return request(service, 'read', path, req, headers)
 
-def register_services(running: dict) -> Locations:
+def register_services(running: dict = undefined) -> Locations:
 	"""Register Services
 
 	Takes a dictionary of services to their urls for use by the request
 	functions
 
 	Arguments:
-		running (dict): Dict of local running services
+		running (dict): Optional, dict of local running services
 
 	Returns:
 		body.locations.Locations
@@ -157,7 +157,7 @@ def register_services(running: dict) -> Locations:
 	for s in oLocations:
 
 		# If the service exists locally
-		if s in running:
+		if running and s in running:
 			__services[s] = running[s]
 
 		# Else, add the URL
