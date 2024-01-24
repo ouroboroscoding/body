@@ -17,13 +17,14 @@ __all__ = ['bottle', 'REST']
 from jobject import jobject
 import jsonb
 import memory
+from tools import clone
 
 # Python imports
 from datetime import datetime
 import re
 import sys
 import traceback
-from typing import List
+from typing import List, Literal
 
 # Pip imports
 import bottle
@@ -40,6 +41,9 @@ class _Route(object):
 	__content_type = re.compile(r'^application\/json; charset=utf-?8$')
 	"""Valid Content-Type"""
 
+	__cors = None
+	"""CORs regular expression"""
+
 	__key_to_errors = {
 		'data': errors.SERVICE_NO_DATA,
 		'session': errors.SERVICE_NO_SESSION
@@ -55,8 +59,27 @@ class _Route(object):
 	__service = ''
 	"""The service's name"""
 
+	__uris: dict = {}
+	"""URIs
+	used to keep track of the uris to callbacks for the purposes of __list calls
+	"""
+
 	__verbose = True
 	"""The verbose mode, set to True to view requests/responses"""
+
+	@classmethod
+	def cors(cls, cors):
+		"""CORs
+
+		Sets the regular expression used to validate domains making requests
+
+		Arguments:
+			pattern (Re.Pattern): A compiled regular expression
+
+		Returns:
+			None
+		"""
+		cls.__cors = cors
 
 	@classmethod
 	def on_error(cls, callback: callable):
@@ -101,22 +124,28 @@ class _Route(object):
 		cls.__verbose = b
 
 	def __init__(self,
-		callback: callable,
-		cors: re.Pattern = None):
+		callback: callable | Literal[True],
+		uri: str | None = None
+	):
 		"""Constructor
 
 		Initialises an instance of the route
 
 		Arguments:
 			callback (callable): The function to pass details to when this \
-				route is triggered
-			cors (re.Pattern): Optional, CORS values
+				route is triggered. Send True to make a __list route
 
 		Returns:
 			None
 		"""
+
+		# Store the callback
 		self.__callback = callback
-		self.__cors = cors
+
+		# If we got a uri, associated the callback with it globally, this way
+		#	we can reference it when getting __list requests
+		if uri is not None:
+			self.__uris[uri[1:]] = callback
 
 	def __call__(self):
 		"""Call (__call__)
@@ -237,22 +266,131 @@ class _Route(object):
 					str('data' in oReq and jsonb.encode(oReq.data, 2) or 'None')
 				))
 
-			# Call the appropriate API method based on the HTTP/request method
-			try:
-				oResponse = self.__callback(oReq)
+			# If this is a list request
+			if self.__callback is True:
 
-			# If we got a KeyError
-			except (AttributeError, KeyError) as e:
-				if e.args[0] in self.__key_to_errors:
-					oResponse = response.Error(self.__key_to_errors[e.args[0]])
+				# If the data isn't passed or isn't an array
+				if 'data' not in oReq or not isinstance(oReq.data, list):
+					oResponse = response.Error(
+						errors.REST_REQUEST_DATA,
+						'data must be an array'
+					)
+
+				# Else, if it's beyond the max
+				elif len(oReq.data) > 10:
+					oResponse = response.Error(
+						errors.REST_LIST_TO_LONG,
+						'Can not request more than 10 urls via __list'
+					)
+
+				# Else, we have an array of nouns to call and return
 				else:
-					raise
 
-			# If we got a response exception
-			except response.ResponseException as e:
+					# Init the response
+					lResponse = []
 
-				# Set the response using the exceptions first argument
-				oResponse = e.args[0]
+					# Go through each element in the list
+					for m in oReq.data:
+
+						# If we got a string
+						if isinstance(m, str):
+							m = [ m ]
+
+						# Else, if we didn't get a list
+						elif not isinstance(m, list):
+							oResponse = response.Error(
+								errors.REST_REQUEST_DATA, [ m,
+									'data must be an array or URI and data, ' \
+									'or single string for the URI' ]
+							)
+							break
+
+						# If the URI doesn't exist
+						if m[0] not in self.__uris:
+							oResponse = response.Error(
+								errors.REST_LIST_INVALID_URI,
+								m[0]
+							)
+							break
+
+						# Clone the __list request data so that the session
+						#	or any other data is shared
+						oRequest = clone(oReq)
+
+						# If unique data was passed for the child request
+						if len(m) == 2:
+
+							# If we didn't get a dict
+							if not isinstance(m[1], dict):
+								oResponse = response.Error(
+									errors.REST_LIST_INVALID_URI,
+									[ m[1], 'data must be an object' ]
+								)
+								break
+
+							# Set the data for this request
+							oRequest.data = m[1]
+
+						# No unique data was sent, so we need to delete the
+						#	original data from the request
+						else:
+							try: del oRequest.data
+							except AttributeError: pass
+
+						# Call the request and append the data to the
+						#	response
+						try:
+							lResponse.append([
+								m[0],
+								self.__uris[m[0]](oRequest).to_dict()
+							])
+
+						# If we got a KeyError
+						except (AttributeError, KeyError) as e:
+							if e.args[0] in self.__key_to_errors:
+								oResponse = response.Error(
+									self.__key_to_errors[e.args[0]]
+								)
+								break
+							else:
+								raise
+
+						# If we got a response exception
+						except response.ResponseException as e:
+
+							# Set the response using the exceptions first argument
+							oResponse = e.args[0]
+							break
+
+					# Else, we got through the list
+					else:
+
+						# Set the response using the list of individual
+						#	responses
+						oResponse = response.Response(lResponse)
+
+			# Else, we are making a single URI request
+			else:
+
+				# Call the appropriate API method based on the HTTP/request
+				#	method
+				try:
+					oResponse = self.__callback(oReq)
+
+				# If we got a KeyError
+				except (AttributeError, KeyError) as e:
+					if e.args[0] in self.__key_to_errors:
+						oResponse = response.Error(
+							self.__key_to_errors[e.args[0]]
+						)
+					else:
+						raise
+
+				# If we got a response exception
+				except response.ResponseException as e:
+
+					# Set the response using the exceptions first argument
+					oResponse = e.args[0]
 
 		# If we get absolutely any exception
 		except Exception as e:
@@ -350,6 +488,7 @@ class REST(bottle.Bottle):
 		name: str,
 		instance: service.Service,
 		cors: List[str] = None,
+		lists = True,
 		on_errors: callable = None,
 		verbose: bool = False
 	):
@@ -361,6 +500,8 @@ class REST(bottle.Bottle):
 			name (str): The name of the service
 			instance (Service): The service to make accessible via REST
 			cors (str[]): A list of allowed domains for CORS policy
+			lists (bool | dict): True to add a __list call to the default
+								service, else a dictionay of uris to services
 			on_errors (callable): Optional, a function to call when a service \
 									request throws an exception
 
@@ -391,6 +532,9 @@ class REST(bottle.Bottle):
 			else:
 				cors = '(?:%s)' % '|'.join([ s.replace('.', '\\.') for s in cors ])
 			cors = re.compile('https?://(.*\\.)?%s' % cors)
+
+			# Set it
+			_Route.cors(cors)
 
 		# Set the service name
 		_Route.service(name)
@@ -423,9 +567,26 @@ class REST(bottle.Bottle):
 					[ sMethod, 'OPTIONS' ],
 					_Route(
 						getattr(self.instance, sFunc),	# The function to call
-						cors							# Optional CORS regex
+						uri = (lists and sMethod == 'GET') and sUri or None
 					)
 				)
+
+		# If we have a request for a list of requests
+		if lists:
+
+			# If it's True
+			if lists is True:
+				lists = { '/__list': service }
+
+			# Go through each request in the list
+			for sUri in lists:
+
+				# Add the list read route
+				self.route(
+					sUri,
+					['GET', 'OPTIONS'],
+					_Route(True)
+		)
 
 	# run method
 	def run(self, server='gunicorn', host='127.0.0.1', port=8080,

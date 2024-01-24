@@ -41,8 +41,11 @@ class Response(object):
 			Response
 		"""
 
-		# If there's no data, set None, else use the data
-		self.data = data is not undefined and data or None
+		# If there's no data
+		if data is not undefined:
+			self.data = data
+		else:
+			self.data = None
 
 		# If there's an error, figure out what type
 		if error is not undefined:
