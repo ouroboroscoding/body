@@ -4,8 +4,8 @@ with open('README.md', 'r') as oF:
 	long_description=oF.read()
 
 setup(
-	name='Body-OC',
-	version='1.0.1',
+	name='body-oc',
+	version='2.0.0',
 	description='Body contains shared concepts among all body parts',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
@@ -22,7 +22,14 @@ setup(
 	packages=['body'],
 	python_requires='>=3.10',
 	install_requires=[
-		'Rest-OC>=1.1.1'
+		'bottle>=0.12.23,<0.13',
+		'gunicorn>=21.2.0,<21.3',
+		'jobject>=1.0.2,<1.1.0',
+		'jsonb>=1.0.0,<1.1.0',
+		'memory-oc>=1.0.0,<1.1',
+		'strings-oc>=1.0.3,<1.1',
+		'requests>=2.31.0,<2.32',
+		'undefined-oc>=1.0.0,<1.1'
 	],
 	zip_safe=True
 )

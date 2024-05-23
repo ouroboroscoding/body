@@ -4,17 +4,29 @@
 Shared error codes
 """
 
-__author__ = "Chris Nasr"
-__copyright__ = "Ouroboros Coding Inc"
-__version__ = "1.0.0"
-__email__ = "chris@ouroboroscoding.com"
-__created__ = "2022-08-29"
+__author__		= "Chris Nasr"
+__copyright__	= "Ouroboros Coding Inc."
+__email__		= "chris@ouroboroscoding.com"
+__created__		= "2022-08-29"
 
-# Python imports
-from pprint import pformat
+REST_REQUEST_DATA = 100
+REST_CONTENT_TYPE = 101
+REST_AUTHORIZATION = 102
+REST_LIST_TO_LONG = 103
+REST_LIST_INVALID_URI = 104
+"""REST related errors"""
 
-# Pip imports
-from RestOC import Conf, EMail
+SERVICE_ACTION = 200
+SERVICE_STATUS = 201
+SERVICE_CONTENT_TYPE = 202
+SERVICE_UNREACHABLE = 203
+SERVICE_NOT_REGISTERED = 204
+SERVICE_NO_SUCH_NOUN = 205
+SERVICE_TO_BE_USED_LATER = 206
+SERVICE_CRASHED = 207
+SERVICE_NO_DATA = 208
+SERVICE_NO_SESSION = 209
+"""Service related errors"""
 
 RIGHTS = 1000
 """Rights insufficient or missing"""
@@ -32,37 +44,5 @@ DB_DELETE_FAILED = 1103
 DB_UPDATE_FAILED = 1104
 DB_KEY_BEING_USED = 1105
 DB_ARCHIVED = 1106
+DB_REFERENCES = 1107
 """DB related errors"""
-
-def service_error(error):
-	"""Service Error
-
-	Passed to REST instances so we can email errors to developers as soon as
-	they happen
-
-	Arguments:
-		error (dict): An object with service, path, data, session, environ and
-						error message
-
-	Returns:
-		bool
-	"""
-
-	# If we don't send out errors
-	if(not Conf.get(('services', 'send_error_emails'))):
-		return True
-
-	# Generate a list of the individual parts of the error
-	lErrors = [
-		'ERROR MESSAGE\n\n%s\n' % error['traceback'],
-		'REQUEST\n\n%s %s:%s\n' % (error['method'], error['service'], error['path'])
-	]
-	if 'data' in error and error['data']:
-		lErrors.append('DATA\n\n%s\n' % pformat(error['data']))
-	if 'session' in error and error['session']:
-		lErrors.append('SESSION\n\n%s\n' % pformat({k:error['session'][k] for k in error['session']}))
-	if 'environ' in error and error['environ']:
-		lErrors.append('ENVIRONMENT\n\n%s\n' % pformat(error['environ']))
-
-	# Send the email
-	return EMail.error('\n'.join(lErrors))
