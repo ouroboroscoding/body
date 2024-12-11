@@ -526,11 +526,18 @@ class REST(bottle.Bottle):
 		# If cors, compile it
 		if cors:
 
+			# If it's not a list
+			if not isinstance(cors, list):
+				raise RuntimeError('conf.body.allowed must be a list')
+
 			# If we only have one
 			if len(cors) == 1:
 				cors = cors[0].replace('.', '\\.')
 			else:
-				cors = '(?:%s)' % '|'.join([ s.replace('.', '\\.') for s in cors ])
+				cors = '(?:%s)' % '|'.join([
+					s.replace('.', '\\.')
+					for s in cors
+				])
 			cors = re.compile('https?://(.*\\.)?%s' % cors)
 
 			# Set it

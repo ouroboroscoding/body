@@ -211,7 +211,7 @@ def request(
 
 	# If we have a session, add the ID to the headers
 	if 'session' in req and req['session']:
-		dHeaders['Authorization'] = req['session'].id()
+		dHeaders['Authorization'] = req['session'].key()
 
 	# Loop requests so we don't fail just because of a network glitch
 	iAttempts = 0
@@ -222,7 +222,7 @@ def request(
 
 		# If we got a service instance
 		if isinstance(__services[service], Service):
-			print('Can not currently call local services', file=stderr)
+			print('Can not currently call local services', file = stderr)
 
 		# Else, this is an external service
 		else:
