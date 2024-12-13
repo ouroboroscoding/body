@@ -5,7 +5,7 @@ with open('README.md', 'r') as oF:
 
 setup(
 	name='body-oc',
-	version='2.0.0',
+	version='2.0.1',
 	description='Body contains shared concepts among all body parts',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
@@ -27,7 +27,7 @@ setup(
 		'jobject>=1.0.2,<1.1.0',
 		'jsonb>=1.0.0,<1.1.0',
 		'memory-oc>=1.0.0,<1.1',
-		'strings-oc>=1.0.3,<1.1',
+		'strings-oc>=1.0.7,<1.1',
 		'requests>=2.31.0,<2.32',
 		'undefined-oc>=1.0.0,<1.1'
 	],
