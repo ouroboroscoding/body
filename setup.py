@@ -29,7 +29,8 @@ setup(
 		'memory-oc>=1.0.0,<1.1',
 		'strings-oc>=1.0.7,<1.1',
 		'requests>=2.31.0,<2.32',
-		'undefined-oc>=1.0.0,<1.1'
+		'undefined-oc>=1.0.0,<1.1',
+		'tools-oc>=1.2.5,<1.3'
 	],
 	zip_safe=True
 )
