@@ -20,6 +20,10 @@ setup(
 	author_email='chris@ouroboroscoding.com',
 	license='Custom',
 	packages=['body'],
+	package_data={'body': [
+		'docs/*',
+		'docs/templates/*.j2'
+	]},
 	python_requires='>=3.10',
 	install_requires=[
 		'bottle>=0.12.23,<0.13',
@@ -32,5 +36,8 @@ setup(
 		'undefined-oc>=1.0.0,<1.1',
 		'tools-oc>=1.2.5,<1.3'
 	],
+	entry_points={
+		'console_scripts': ['body-docs=body.docs.__main__:cli']
+	},
 	zip_safe=True
 )
