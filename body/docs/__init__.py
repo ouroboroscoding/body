@@ -29,6 +29,7 @@ _data = re.compile(
 	r'^([^,]+)\s*,\s*([^,]+)\s*,\s*(no|yes)\s*,\s*(.+)$', re.IGNORECASE
 )
 _error = re.compile(r'^(\d+)\s*,\s*((?:[a-z0-9_]+\.)?[A-Z0-9_]+)\s*,\s*(.+)$')
+_response = re.compile(r'^([^,]+)\s*,\s*([^,]+)\s*,\s*(.+)$')
 
 # Constants
 EXTENSIONS = { 'markdown': 'md' }
@@ -57,9 +58,30 @@ def handle_class(
 	# Init the return
 	dRet = {
 		'name': _class.name,
+		'file': _class.name.lower(),
 		'uri': _class.name.lower(),
 		'requests': [ ]
 	}
+
+	# Get the docstring and store it
+	sDoc = ast.get_docstring(_class, True)
+
+	# Parse the docstring to get the sections
+	if parser == 'google':
+		dSections = parse_google(sDoc)
+	else:
+		raise ValueError('parser', 'invalid parser "%s"' % parser)
+
+	# If we have a name override
+	if 'docs-file' in dSections:
+		dRet['file'] = dSections['docs-file']
+
+	# Add the description
+	dRet['description'] = dSections['description']
+
+	# If we have a body overwrite
+	if 'docs-body' in dSections:
+		dRet['body'] = dSections['docs-body']
 
 	# Step through each child of the class
 	for oMethod in _class.body:
@@ -191,13 +213,8 @@ def handle_method(
 	dRet['description'] = 'description' in dSections and \
 		dSections['description'] or ''
 
-	# If we don't have a data section
-	if 'data' not in dSections:
-		print('No "data" section found in "%s" docstring' % method.name,
-			file = stderr)
-
-	# Else, try to parse the data section
-	else:
+	# If we have a data section
+	if 'data' in dSections:
 
 		# Split data into lines, strip whitespace
 		lLines = [ s.strip() for s in dSections['data'].split('\n') ]
@@ -226,22 +243,41 @@ def handle_method(
 		if lData:
 			dRet['data'] = lData
 
-	# If we don't have a response section
-	if 'response' not in dSections:
-		print('No "response" section found in "%s" docstring' % method.name,
-			file = stderr)
+		# Else, just pass the original string
+		else:
+			dRet['data'] = dSections['data']
 
-	# Else, try to parse the data section
-	else:
-		dRet['response'] = dSections['response']
+	# If we have a response section
+	if 'response' in dSections:
 
-	# If we don't have an error section
-	if 'error' not in dSections:
-		print('No "error" section found in "%s" docstring' % method.name,
-			file = stderr)
+		# Split response into lines, strip whitespace
+		lLines = [ s.strip() for s in dSections['response'].split('\n') ]
 
-	# Else, try to parse the error section
-	else:
+		# Init response
+		lResponse = []
+
+		# Go through each line
+		for s in lLines:
+
+			# Match it
+			m = _response.match(s)
+			if m:
+				lResponse.append({
+					'name': m.group(1),
+					'type': m.group(2),
+					'descr': m.group(3)
+				})
+
+		# If we have any, add it
+		if lResponse:
+			dRet['response'] = lResponse
+
+		# Else, just pass the original string
+		else:
+			dRet['response'] = dSections['response']
+
+	# If we have an error section
+	if 'error' in dSections:
 
 		# Split error into lines, strip whitespace
 		lLines = [ s.strip() for s in dSections['error'].split('\n') ]
@@ -268,6 +304,10 @@ def handle_method(
 		# If we have any, add it
 		if lError:
 			dRet['error'] = lError
+
+	# If we have an example section
+	if 'example' in dSections:
+		dRet['example'] = dSections['example']
 
 	# Return the info
 	return dRet
@@ -306,6 +346,6 @@ def generate_service(service: dict, format: str, output: str):
 
 	# Render the template and save it to the output folder
 	return to_file(
-		'%s/%s.%s' % ( output, service['uri'], EXTENSIONS[format] ),
+		'%s/%s.%s' % ( output, service['file'], EXTENSIONS[format] ),
 		oTpl.render(**service)
 	)
