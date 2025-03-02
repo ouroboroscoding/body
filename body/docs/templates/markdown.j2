@@ -1,0 +1,72 @@
+# {{ name }}
+{{ description }}
+
+{% for req in requests %}
+- [{{ req.name }}](#{{ req.name|lower|replace(' ', '-') }})
+{% endfor %}
+{% for req in requests %}
+
+## {{ req.name }}
+{{ req.description }}
+
+	{% if req.example %}
+{{ req.example }}
+	{% else %}
+		{% if body %}
+Using @ouroboros/{{ body }}
+```javascript
+{{ body }}.{{ req.action }}(
+	'{{ req.uri }}'{% if req.data %}, request{% endif %} 
+).then(data => {}, error => {});
+		{% else %}
+Using @ouroboros/body
+```javascript
+body.{{ req.action }}(
+  '{{ uri }}', '{{ req.uri }}'{% if req.data %}, request{% endif %} 
+).then(data => {}, error => {});
+		{% endif %}
+```
+	{% endif %}
+	{% if req.data %}
+
+		{% if req.data is string %}
+### Request
+{{ req.data }}
+		{% else %}
+### Request variables
+| name | type | optional | description |
+| ---- | ---- | -------- | ----------- |
+			{% for var in req.data %}
+| {{ var.name }} | {{ var.type|replace('|', '\|') }} | {{ var.optional }} | {{ var.descr}} |
+			{% endfor %}
+		{% endif %}
+	{% endif %}
+	{% if req.response %}
+
+		{% if req.response is string %}
+### Response
+{{ req.response }}
+		{% else %}
+### Response variables
+| name | type | description |
+| ---- | ---- | ----------- |
+			{% for var in req.response %}
+| {{ var.name }} | {{ var.type|replace('|', '\|') }} | {{ var.descr}} |
+			{% endfor %}
+		{% endif %}
+	{% endif %}
+	{% if req.error %}
+
+		{% if req.error is string %}
+### Error
+{{ req.error }}
+		{% else %}
+### Error codes
+| code | constant | description |
+| ---- | -------- | ----------- |
+			{% for var in req.error %}
+| {{ var.code }} | {{ var.const }} | {{ var.descr}} |
+			{% endfor %}
+		{% endif %}
+	{% endif %}
+{% endfor %}
