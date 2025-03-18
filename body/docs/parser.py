@@ -14,7 +14,7 @@ __created__		= "2025-02-23"
 import re
 
 # Regular expressions
-_google_section = re.compile(r'^([^\s:]+):\s*(.*)$')
+_google_section = re.compile(r'^([^\s:]+(?: [^\s:]+)*):\s*(.*)$')
 _google_whitespace = re.compile(r'^(\s+)')
 
 def parse_google(s: str) -> dict:
@@ -64,7 +64,7 @@ def parse_google(s: str) -> dict:
 			oWhitespace = None
 
 			# Store the new section name
-			sKey = m.group(1).lower()
+			sKey = m.group(1).lower().replace(' ', '_')
 			dSections[sKey] = []
 
 			# If we have a group 2, set it as the new line
