@@ -47,33 +47,40 @@ def parse_google(s: str) -> dict:
 	# Loop through the remaining lines
 	for sLine in lLines[1:]:
 
-		# Search for a section header
+		# If the line is a new section header
 		m = _google_section.match(sLine)
 		if m:
 
-			# Check the last line of the previous section, if it's an empty line
-			#	delete it
-			if len(dSections[sKey]) and dSections[sKey][-1].strip() == '':
-				dSections[sKey].pop()
+			# If we need to skip it
+			if sLine[0] == '-' and sLine[-1] == '-':
+				sLine = sLine[1:-1]
 
-			# If the previous section is empty
-			if not dSections[sKey]:
-				del dSections[sKey]
-
-			# Clear the whitespace
-			oWhitespace = None
-
-			# Store the new section name
-			sKey = m.group(1).lower().replace(' ', '_')
-			dSections[sKey] = []
-
-			# If we have a group 2, set it as the new line
-			if m.group(2) is not None:
-				sLine = m.group(2)
-
-			# Else, loop back around to the next line
+			# Else, continue processing the new section
 			else:
-				continue
+
+				# Check the last line of the previous section, if it's an empty line
+				#	delete it
+				if len(dSections[sKey]) and dSections[sKey][-1].strip() == '':
+					dSections[sKey].pop()
+
+				# If the previous section is empty
+				if not dSections[sKey]:
+					del dSections[sKey]
+
+				# Clear the whitespace
+				oWhitespace = None
+
+				# Store the new section name
+				sKey = m.group(1).lower().replace(' ', '_')
+				dSections[sKey] = []
+
+				# If we have a group 2, set it as the new line
+				if m.group(2) is not None:
+					sLine = m.group(2)
+
+				# Else, loop back around to the next line
+				else:
+					continue
 
 		# If we have nothing in the section yet
 		if not dSections[sKey]:

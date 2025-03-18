@@ -45,6 +45,13 @@ body.{{ req.action }}(
 			{% endfor %}
 		{% endif %}
 	{% endif %}
+	{% if req.response_example %}
+
+### Response example
+```json
+{{ req.response_example }}
+```
+	{% endif %}
 	{% if req.response %}
 
 		{% if req.response is string %}

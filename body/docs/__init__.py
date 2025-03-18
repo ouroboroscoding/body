@@ -280,6 +280,10 @@ def handle_method(
 		else:
 			dRet['response'] = dSections['response']
 
+	# If we have a response example
+	if 'response_example' in dSections:
+		dRet['response_example'] = dSections['response_example']
+
 	# If we have an error section
 	if 'error' in dSections:
 
