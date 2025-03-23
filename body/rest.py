@@ -11,7 +11,7 @@ __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-17"
 
 # Limit exports
-__all__ = ['bottle', 'REST']
+__all__ = [ 'bottle', 'REST' ]
 
 # Ouroboros imports
 from jobject import jobject
@@ -501,9 +501,9 @@ class REST(bottle.Bottle):
 			instance (Service): The service to make accessible via REST
 			cors (str[]): A list of allowed domains for CORS policy
 			lists (bool | dict): True to add a __list call to the default
-								service, else a dictionay of uris to services
+				service, else a dictionay of uris to services
 			on_errors (callable): Optional, a function to call when a service \
-									request throws an exception
+				request throws an exception
 
 		Raises:
 			ValueError
@@ -591,7 +591,7 @@ class REST(bottle.Bottle):
 				# Add the list read route
 				self.route(
 					sUri,
-					['GET', 'OPTIONS'],
+					[ 'GET', 'OPTIONS' ],
 					_Route(True)
 		)
 
