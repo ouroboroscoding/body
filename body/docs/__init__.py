@@ -75,6 +75,8 @@ def handle_class(
 	# If we have a name override
 	if 'docs-file' in dSections:
 		dRet['file'] = dSections['docs-file']
+	elif 'docs_file' in dSections:
+		dRet['file'] = dSections['docs_file']
 
 	# Add the description
 	dRet['description'] = dSections['description']
@@ -82,6 +84,8 @@ def handle_class(
 	# If we have a body overwrite
 	if 'docs-body' in dSections:
 		dRet['body'] = dSections['docs-body']
+	elif 'docs_body' in dSections:
+		dRet['body'] = dSections['docs_body']
 
 	# Step through each child of the class
 	for oMethod in _class.body:
@@ -181,7 +185,7 @@ def handle_method(
 	lParts = method.name.split('_')
 
 	# If it's not a valid action
-	if lParts[-1] not in [ 'create', 'delete', 'read', 'update']:
+	if lParts[-1] not in [ 'create', 'delete', 'read', 'update' ]:
 		return False
 
 	# If it doesn't have the expected arguments
@@ -276,6 +280,10 @@ def handle_method(
 		else:
 			dRet['response'] = dSections['response']
 
+	# If we have a response example
+	if 'response_example' in dSections:
+		dRet['response_example'] = dSections['response_example']
+
 	# If we have an error section
 	if 'error' in dSections:
 
@@ -307,7 +315,9 @@ def handle_method(
 
 	# If we have an example section
 	if 'example' in dSections:
-		dRet['example'] = dSections['example']
+		dRet['example_raw'] = dSections['example']
+	elif 'data_example' in dSections:
+		dRet['data_example'] = dSections['data_example']
 
 	# Return the info
 	return dRet
@@ -335,7 +345,7 @@ def generate_service(service: dict, format: str, output: str):
 
 	# Notify the user to install Jinja2 in development
 	except ModuleNotFoundError as e:
-		print('Using "body docs" requires that Jinja2 be installed. It is ' \
+		print('Using "body-docs" requires that Jinja2 be installed. It is ' \
 			'not installed by default to save space on production installs.\n' \
 			'To install jinja2 run the following in your venv:\n\n' \
 			'pip install jinja2', file = stderr)
