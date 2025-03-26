@@ -1,6 +1,7 @@
 # body_oc releases
 
 ## 2.0.3
+- Updated LICENSE.
 - Added `EMPTY_TUUID` to `constants.py`
 - Added `__all__` to `errors.py` that exports everything that's an int.
 - `body-docs` will now allow single spaces in section names, and those spaces are replaced with underscores in the returned parser object.
