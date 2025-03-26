@@ -28,13 +28,7 @@ from time import sleep
 import requests
 
 # Local imports
-from . import	constants, \
-				errors, \
-				locations, \
-				regex, \
-				response, \
-				rest, \
-				service
+from . import constants, errors, locations, regex, response, rest, service
 
 # Error, Response, and ResponseException
 Error = response.Error
@@ -52,10 +46,10 @@ __services = {}
 """Registered Services"""
 
 __action_to_request = {
-	'create': [requests.post, 'POST'],
-	'delete': [requests.delete, 'DELETE'],
-	'read': [requests.get, 'GET'],
-	'update': [requests.put, 'PUT']
+	'create': [ requests.post, 'POST' ],
+	'delete': [ requests.delete, 'DELETE' ],
+	'read': [ requests.get, 'GET' ],
+	'update': [ requests.put, 'PUT' ]
 }
 """Map actions to request methods"""
 

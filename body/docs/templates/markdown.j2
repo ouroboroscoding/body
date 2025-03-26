@@ -1,6 +1,7 @@
 # {{ name }}
 {{ description }}
 
+## Requests
 {% for req in requests %}
 - [{{ req.name }}](#{{ req.name|lower|replace(' ', '-') }})
 {% endfor %}
@@ -9,18 +10,21 @@
 ## {{ req.name }}
 {{ req.description }}
 
-	{% if req.example %}
-{{ req.example }}
+	{% if req.example_raw %}
+{{ req.example_raw }}
 	{% else %}
 		{% if body %}
-Using @ouroboros/{{ body }}
 ```javascript
+import {{ body }} from '@ouroboros/{{ body }}';
+{% if req.data_example %}const request = {{ req.data_example }};
+{% endif %}
 {{ body }}.{{ req.action }}(
-	'{{ req.uri }}'{% if req.data %}, request{% endif %} 
+  '{{ req.uri }}'{% if req.data %}, request{% endif %} 
 ).then(data => {}, error => {});
 		{% else %}
-Using @ouroboros/body
 ```javascript
+import body from '@ouroboros/body';
+{% if req.data_example %}const request = {{ req.data_example }};{% endif %} 
 body.{{ req.action }}(
   '{{ uri }}', '{{ req.uri }}'{% if req.data %}, request{% endif %} 
 ).then(data => {}, error => {});
@@ -40,6 +44,13 @@ body.{{ req.action }}(
 | {{ var.name }} | {{ var.type|replace('|', '\|') }} | {{ var.optional }} | {{ var.descr}} |
 			{% endfor %}
 		{% endif %}
+	{% endif %}
+	{% if req.response_example %}
+
+### Response example
+```json
+{{ req.response_example }}
+```
 	{% endif %}
 	{% if req.response %}
 
