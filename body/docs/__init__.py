@@ -345,7 +345,7 @@ def generate_service(service: dict, format: str, output: str):
 
 	# Notify the user to install Jinja2 in development
 	except ModuleNotFoundError as e:
-		print('Using "body docs" requires that Jinja2 be installed. It is ' \
+		print('Using "body-docs" requires that Jinja2 be installed. It is ' \
 			'not installed by default to save space on production installs.\n' \
 			'To install jinja2 run the following in your venv:\n\n' \
 			'pip install jinja2', file = stderr)

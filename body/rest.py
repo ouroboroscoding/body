@@ -528,7 +528,7 @@ class REST(bottle.Bottle):
 
 			# If it's not a list
 			if not isinstance(cors, list):
-				raise RuntimeError('conf.body.allowed must be a list')
+				raise RuntimeError('REST.cors must be a list')
 
 			# If we only have one
 			if len(cors) == 1:

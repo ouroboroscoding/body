@@ -12,8 +12,8 @@ __created__		= "2023-01-25"
 # Python imports
 import re
 
-EMAIL_ADDRESS = re.compile(r'[^@\s]+@[^@\s]+\.[a-zA-Z0-9]{2,}$')
+EMAIL_ADDRESS = re.compile(r'^[^@\s]+@[^@\s]+\.[a-zA-Z0-9]{2,}$')
 """Email Address"""
 
-PHONE_NUMBER_NA = re.compile(r'\+?1?[ -]?\(?(\d{3})\)?[ -]?(\d{3})[ -]?(\d{4})')
+PHONE_NUMBER_NA = re.compile(r'^\+?1?[ -]?\(?(\d{3})\)?[ -]?(\d{3})[ -]?(\d{4})$')
 """North American Phone Number"""
