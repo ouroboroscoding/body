@@ -4,6 +4,7 @@
 Extends Service to allow for launching as an http accesible rest
 service
 """
+from __future__ import annotations
 
 __author__		= "Chris Nasr"
 __copyright__	= "Ouroboros Coding Inc."
@@ -20,17 +21,24 @@ import memory
 from tools import clone
 
 # Python imports
+from collections.abc import Callable
 from datetime import datetime
 import re
 import sys
 import traceback
-from typing import List, Literal
+from typing import List, Literal, TYPE_CHECKING
 
 # Pip imports
 import bottle
 
 # Local imports
-from . import errors, response, service
+from body.errors import \
+	REST_AUTHORIZATION, REST_CONTENT_TYPE, REST_LIST_INVALID_URI, \
+	REST_LIST_TO_LONG, REST_REQUEST_DATA, SERVICE_CRASHED, SERVICE_NO_DATA, \
+	SERVICE_NO_SESSION
+from body.response import Error, Response, ResponseException
+if TYPE_CHECKING:
+	from body.service import Service
 
 class _Route(object):
 	"""Route
@@ -45,19 +53,20 @@ class _Route(object):
 	"""CORs regular expression"""
 
 	__key_to_errors = {
-		'data': errors.SERVICE_NO_DATA,
-		'session': errors.SERVICE_NO_SESSION
+		'data': SERVICE_NO_DATA,
+		'session': SERVICE_NO_SESSION
 	}
 	"""Maps key error variables to their response error code"""
 
 	__on_error = None
 	"""On Error
-
 	Function called when a service request raises an exception
 	"""
 
-	__service = ''
-	"""The service's name"""
+	__services = []
+	"""Services
+	Minimizes space usage on service names repeating
+	"""
 
 	__uris: dict = {}
 	"""URIs
@@ -96,20 +105,6 @@ class _Route(object):
 		cls.__on_error = staticmethod(callback)
 
 	@classmethod
-	def service(cls, s: str):
-		"""Service
-
-		Sets the name of the service associated with all routes
-
-		Arguments:
-			s (str): The name of the service
-
-		Returns:
-			None
-		"""
-		cls.__service = s
-
-	@classmethod
 	def verbose(cls, b: bool):
 		"""Verbose
 
@@ -124,6 +119,7 @@ class _Route(object):
 		cls.__verbose = b
 
 	def __init__(self,
+		service: str,
 		callback: callable | Literal[True],
 		uri: str | None = None
 	):
@@ -132,8 +128,10 @@ class _Route(object):
 		Initialises an instance of the route
 
 		Arguments:
+			service (str): The name of the service associated with this route
 			callback (callable): The function to pass details to when this \
 				route is triggered. Send True to make a __list route
+			uri (str):
 
 		Returns:
 			None
@@ -142,7 +140,14 @@ class _Route(object):
 		# Store the callback
 		self.__callback = callback
 
-		# If we got a uri, associated the callback with it globally, this way
+		# Get the index of the service
+		try:
+			self._service = self.__services.index(service)
+		except ValueError:
+			self.__services.append(service)
+			self._service = len(self.__services) - 1
+
+		# If we got a uri, associate the callback with it globally, this way
 		#	we can reference it when getting __list requests
 		if uri is not None:
 			self.__uris[uri[1:]] = callback
@@ -173,7 +178,7 @@ class _Route(object):
 			if self.__verbose:
 				print('%s: %s OPTIONS %s' % (
 					str(datetime.now()),
-					self.__service,
+					self.__services[self._service],
 					bottle.request.path
 				))
 
@@ -207,17 +212,22 @@ class _Route(object):
 			try:
 				oReq.data = jsonb.decode(bottle.request.query['d'])
 			except Exception as e:
-				return response.Error((errors.REST_REQUEST_DATA, '%s\n%s' % (bottle.request.query['d'], str(e)))).to_json()
+				return Error(
+					REST_REQUEST_DATA,
+					'%s\n%s' % ( bottle.request.query['d'], str(e) )
+				).to_json()
 
 		# Else we most likely got the data in the body
 		else:
 
 			# Make sure the request send JSON
 			try:
-				if not self.__content_type.match(bottle.request.headers['Content-Type'].lower()):
-					return str(response.Error(errors.REST_CONTENT_TYPE))
+				if not self.__content_type.match(
+					bottle.request.headers['Content-Type'].lower()
+				):
+					return str(Error(REST_CONTENT_TYPE))
 			except KeyError:
-				return response.Error(errors.REST_CONTENT_TYPE).to_json()
+				return Error(REST_CONTENT_TYPE).to_json()
 
 			# Store the data, if it's too big we need to read it rather than
 			#	use getvalue
@@ -236,7 +246,10 @@ class _Route(object):
 			try:
 				if sData: oReq.data = jsonb.decode(sData)
 			except Exception as e:
-				return response.Error(errors.REST_REQUEST_DATA,'%s\n%s' % (sData, str(e))).to_json()
+				return Error(
+					REST_REQUEST_DATA,
+					'%s\n%s' % ( sData, str(e) )
+				).to_json()
 
 		# If the request sent a authorization token
 		if 'Authorization' in bottle.request.headers:
@@ -247,7 +260,9 @@ class _Route(object):
 			# If the session is not found
 			if not oReq.session:
 				bottle.response.status = 401
-				return response.Error(errors.REST_AUTHORIZATION, 'Unauthorized').to_json()
+				return Error(
+					REST_AUTHORIZATION, 'Unauthorized'
+				).to_json()
 
 			# Else, extend the session's ttl
 			else:
@@ -260,7 +275,7 @@ class _Route(object):
 			if self.__verbose:
 				print('%s REQUEST %s %s %s %s' % (
 					str(datetime.now()),
-					self.__service,
+					self.__services[self._service],
 					bottle.request.method,
 					bottle.request.path,
 					str('data' in oReq and jsonb.encode(oReq.data, 2) or 'None')
@@ -271,15 +286,15 @@ class _Route(object):
 
 				# If the data isn't passed or isn't an array
 				if 'data' not in oReq or not isinstance(oReq.data, list):
-					oResponse = response.Error(
-						errors.REST_REQUEST_DATA,
+					oResponse = Error(
+						REST_REQUEST_DATA,
 						'data must be an array'
 					)
 
 				# Else, if it's beyond the max
 				elif len(oReq.data) > 10:
-					oResponse = response.Error(
-						errors.REST_LIST_TO_LONG,
+					oResponse = Error(
+						REST_LIST_TO_LONG,
 						'Can not request more than 10 urls via __list'
 					)
 
@@ -298,8 +313,8 @@ class _Route(object):
 
 						# Else, if we didn't get a list
 						elif not isinstance(m, list):
-							oResponse = response.Error(
-								errors.REST_REQUEST_DATA, [ m,
+							oResponse = Error(
+								REST_REQUEST_DATA, [ m,
 									'data must be an array or URI and data, ' \
 									'or single string for the URI' ]
 							)
@@ -307,8 +322,8 @@ class _Route(object):
 
 						# If the URI doesn't exist
 						if m[0] not in self.__uris:
-							oResponse = response.Error(
-								errors.REST_LIST_INVALID_URI,
+							oResponse = Error(
+								REST_LIST_INVALID_URI,
 								m[0]
 							)
 							break
@@ -322,8 +337,8 @@ class _Route(object):
 
 							# If we didn't get a dict
 							if not isinstance(m[1], dict):
-								oResponse = response.Error(
-									errors.REST_LIST_INVALID_URI,
+								oResponse = Error(
+									REST_LIST_INVALID_URI,
 									[ m[1], 'data must be an object' ]
 								)
 								break
@@ -348,7 +363,7 @@ class _Route(object):
 						# If we got a KeyError
 						except (AttributeError, KeyError) as e:
 							if e.args[0] in self.__key_to_errors:
-								oResponse = response.Error(
+								oResponse = Error(
 									self.__key_to_errors[e.args[0]]
 								)
 								break
@@ -356,7 +371,7 @@ class _Route(object):
 								raise
 
 						# If we got a response exception
-						except response.ResponseException as e:
+						except ResponseException as e:
 
 							# Set the response using the exceptions first argument
 							oResponse = e.args[0]
@@ -367,7 +382,7 @@ class _Route(object):
 
 						# Set the response using the list of individual
 						#	responses
-						oResponse = response.Response(lResponse)
+						oResponse = Response(lResponse)
 
 			# Else, we are making a single URI request
 			else:
@@ -380,14 +395,14 @@ class _Route(object):
 				# If we got a KeyError
 				except (AttributeError, KeyError) as e:
 					if e.args[0] in self.__key_to_errors:
-						oResponse = response.Error(
+						oResponse = Error(
 							self.__key_to_errors[e.args[0]]
 						)
 					else:
 						raise
 
 				# If we got a response exception
-				except response.ResponseException as e:
+				except ResponseException as e:
 
 					# Set the response using the exceptions first argument
 					oResponse = e.args[0]
@@ -399,20 +414,20 @@ class _Route(object):
 			sError = traceback.format_exc()
 
 			# Print the traceback to stderr
-			print(sError, file=sys.stderr)
+			print(sError, file = sys.stderr)
 
 			# If we have an error handler
 			if self.__on_error:
 
 				# Gather all the details, including optional ones
 				oDetails = {
-					'service': self.__service,
+					'service': self.__services[self._service],
 					'method': bottle.request.method,
 					'path': bottle.request.path,
 					'environment': bottle.request.environ,
 					'traceback': sError
 				}
-				for s in ['data', 'session']:
+				for s in [ 'data', 'session' ]:
 					if s in oReq:
 						oDetails[s] = oReq[s]
 
@@ -420,16 +435,16 @@ class _Route(object):
 				self.__on_error(oDetails)
 
 			# Set a response of service/request crashed
-			oResponse = response.Error(
-				errors.SERVICE_CRASHED,
-				'%s:%s' % (self.__service, bottle.request.path)
+			oResponse = Error(
+				SERVICE_CRASHED,
+				'%s:%s' % ( self.__services[self._service], bottle.request.path )
 			)
 
 		# If the response contains an error
 		if oResponse.error:
 
 			# If it's an authorization error
-			if oResponse.error['code'] == errors.REST_AUTHORIZATION:
+			if oResponse.error['code'] == REST_AUTHORIZATION:
 
 				# Set the http status to 401 Unauthorized
 				bottle.response.status = 401
@@ -439,20 +454,21 @@ class _Route(object):
 					oResponse.error['msg'] = 'Unauthorized'
 
 			# Add the service and path to the call
+			l = [
+				self.__services[self._service],
+				bottle.request.method,
+				bottle.request.path
+			]
 			try:
-				oResponse.error['service'].append([
-					self.__service, bottle.request.method, bottle.request.path
-				])
+				oResponse.error['service'].append(l)
 			except KeyError:
-				oResponse.error['service'] = [
-					[self.__service, bottle.request.method, bottle.request.path]
-				]
+				oResponse.error['service'] = [ l ]
 
 		# If we're in verbose mode
 		if self.__verbose:
 			print('%s RETURNING %s %s %s %s' % (
 				str(datetime.now()),
-				self.__service,
+				self.__services[self._service],
 				bottle.request.method,
 				bottle.request.path,
 				jsonb.encode(oResponse.to_dict(), 2)
@@ -479,17 +495,11 @@ class REST(bottle.Bottle):
 	}
 	"""Maps HTTP methods to service actions"""
 
-	__noun_regex = re.compile(
-		r'([a-z]+(?:_[a-z]+)*)_(create|delete|read|update)'
-	)
-	"""Regular Expression to match to valid service noun method"""
-
 	def __init__(self,
-		name: str,
-		instance: service.Service,
-		cors: List[str] = None,
-		lists = True,
-		on_errors: callable = None,
+		instances: List[Service],
+		cors: List[str] | None = None,
+		lists: str | Literal[True] = True,
+		on_errors: Callable | None = None,
 		verbose: bool = False
 	):
 		"""Constructor
@@ -497,13 +507,15 @@ class REST(bottle.Bottle):
 		Creates a new REST instance
 
 		Arguments:
-			name (str): The name of the service
-			instance (Service): The service to make accessible via REST
+			instances (dict): The service names to instances to make accessible
+				via REST
 			cors (str[]): A list of allowed domains for CORS policy
-			lists (bool | dict): True to add a __list call to the default
-				service, else a dictionay of uris to services
-			on_errors (callable): Optional, a function to call when a service \
+			lists (str | True): True to add `__list` to each service, else a str
+				to use instead of `__list`
+			on_errors (callable): Optional, a function to call when a service
 				request throws an exception
+			verbose (bool): Optional, set to True to print out each request and
+				and response
 
 		Raises:
 			ValueError
@@ -516,12 +528,10 @@ class REST(bottle.Bottle):
 		super(REST, self).__init__()
 
 		# If the instance is not a Service
-		if not isinstance(instance, service.Service):
-			raise ValueError('Invalid service passed to %s' %
-								sys._getframe().f_code.co_name)
-
-		# Store the service
-		self.instance = instance
+		if not isinstance(instances, list):
+			raise TypeError(
+				'instances', 'must be a list', sys._getframe().f_code.co_name
+			)
 
 		# If cors, compile it
 		if cors:
@@ -543,9 +553,6 @@ class REST(bottle.Bottle):
 			# Set it
 			_Route.cors(cors)
 
-		# Set the service name
-		_Route.service(name)
-
 		# If we have an error handler
 		if on_errors:
 			_Route.on_error(on_errors)
@@ -553,52 +560,47 @@ class REST(bottle.Bottle):
 		# Set the verbose mode
 		_Route.verbose(verbose)
 
-		# Go through all the functions found on the service
-		for sFunc in dir(self.instance):
+		# Step through each service
+		bOne = len(instances) == 1
+		for oInstance in instances:
 
-			# Check the format of the method name
-			oMatch = self.__noun_regex.match(sFunc)
-
-			# If it's a match
-			if oMatch:
+			# Go through all the request methods found in the service
+			for dRequest in oInstance.requests:
 
 				# Get the method
-				sMethod = self.__action_to_method[oMatch.group(2)]
+				sMethod = self.__action_to_method[dRequest['action']]
 
-				# Generate the URL
-				sUri = '/' + ('/'.join(oMatch.group(1).split('_')))
+				# Generate the URI
+				sUri = '/%s' % dRequest['name'].replace('_', '/')
 
 				# Register it with bottle
 				self.route(
-					sUri,
+					bOne and sUri or '/%s%s' % ( oInstance.name, sUri ),
 					[ sMethod, 'OPTIONS' ],
 					_Route(
-						getattr(self.instance, sFunc),	# The function to call
-						uri = (lists and sMethod == 'GET') and sUri or None
+						oInstance.name,
+						dRequest['func'],
+						uri = (list and sMethod == 'GET') and sUri or None
 					)
 				)
 
-		# If we have a request for a list of requests
-		if lists:
+			# If we have a request for a list of requests
+			if lists:
 
-			# If it's True
-			if lists is True:
-				lists = { '/__list': service }
-
-			# Go through each request in the list
-			for sUri in lists:
+				# If it's True
+				lists = '/%s' % (lists is True and '__list' or str(lists))
 
 				# Add the list read route
 				self.route(
-					sUri,
+					bOne and lists or '/%s%s' % ( oInstance.name, lists),
 					[ 'GET', 'OPTIONS' ],
-					_Route(True)
-		)
+					_Route(oInstance.name, True)
+				)
 
 	# run method
-	def run(self, server='gunicorn', host='127.0.0.1', port=8080,
-			reloader=False, interval=1, quiet=False, plugins=None,
-			debug=None, maxfile=20971520, **kargs):
+	def run(self, server = 'gunicorn', host = '127.0.0.1', port = 8080,
+			reloader = False, interval = 1, quiet = False, plugins = None,
+			debug = None, maxfile = 20971520, **kargs):
 		"""Run
 
 		Overrides Bottle's run to default gunicorn and other fields
@@ -623,7 +625,7 @@ class REST(bottle.Bottle):
 
 		# Call bottle run
 		bottle.run(
-			app=self, server=server, host=host, port=port, reloader=reloader,
-			interval=interval, quiet=quiet, plugins=plugins, debug=debug,
-			**kargs
+			app = self, server = server, host = host, port = port,
+			reloader = reloader, interval = interval, quiet = quiet,
+			plugins = plugins, debug = debug, **kargs
 		)
