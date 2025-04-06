@@ -223,8 +223,6 @@ the network.
 [configuration sections](#configuration-sections),
 [body section](#body-section) ]
 
-[ [top](#body), [contents](#contents) ]
-
 ## Body Docs
 `body` Comes with a script to auto generate documentation from
 [Service](#service) instances.
