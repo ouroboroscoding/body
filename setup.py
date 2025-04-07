@@ -11,19 +11,15 @@ setup(
 	long_description_content_type='text/markdown',
 	url='https://ouroboroscoding.com/body/',
 	project_urls={
-		'Documentation': 'https://ouroboroscoding.com/body/',
+		'Documentation': 'https://github.com/ouroboroscoding/body/blob/main/documentation.md',
 		'Source': 'https://github.com/ouroboroscoding/body',
 		'Tracker': 'https://github.com/ouroboroscoding/body/issues'
 	},
-	keywords=[ 'rest', 'microservices' ],
+	keywords=[ 'rest', 'microservices', 'micro-services' ],
 	author='Chris Nasr - Ouroboros Coding Inc.',
 	author_email='chris@ouroboroscoding.com',
 	license='Custom',
 	packages=[ 'body' ],
-	package_data={ 'body': [
-		'docs/*',
-		'docs/templates/*.j2'
-	] },
 	python_requires='>=3.10',
 	install_requires=[
 		'bottle>=0.13.2,<0.14',
@@ -36,8 +32,5 @@ setup(
 		'undefined-oc>=1.0.0,<1.1',
 		'tools-oc>=1.2.5,<1.3'
 	],
-	entry_points={
-		'console_scripts': ['body-docs=body.docs.__main__:cli']
-	},
 	zip_safe=True
 )

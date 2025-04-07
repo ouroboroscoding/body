@@ -35,8 +35,8 @@ javascript / typescript framework.
 body_oc requires python 3.10 or higher
 
 ### Install via pip
-```console
-foo@bar:~$ pip install body_oc
+```bash
+pip install body_oc
 ```
 
 [ [top](#body_oc) / [contents](#contents) ]
