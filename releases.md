@@ -1,5 +1,9 @@
 # body_oc releases
 
+## 2.1.0
+- Removed `register_services` as data is generated automatically.
+- Added `rest` method on `Service` to automatically create a `REST` instance using the instance of the `Service`.
+
 ## 2.0.3
 - Updated LICENSE.
 - Added `EMPTY_TUUID` to `constants.py`
