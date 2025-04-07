@@ -1,6 +1,6 @@
 # body_oc releases
 
-## TBD
+## 2.1.0
 - Removed `register_services` as data is generated automatically.
 - Added `rest` method on `Service` to automatically create a `REST` instance using the instance of the `Service`.
 
