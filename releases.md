@@ -3,7 +3,6 @@
 ## TBD
 - Removed `register_services` as data is generated automatically.
 - Added `rest` method on `Service` to automatically create a `REST` instance using the instance of the `Service`.
-- Removed Locations class and file
 
 ## 2.0.3
 - Updated LICENSE.
