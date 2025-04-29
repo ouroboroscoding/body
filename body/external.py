@@ -134,7 +134,7 @@ def register_service(name: str, instance: Service):
 	for dMethod in instance.requests:
 
 		# Generate the URL
-		sUri = '/%s/%s' % (name, dMethod['name'].replace('_', '/'))
+		sUri = dMethod['name'].replace('_', '/')
 
 		# Store the url and action
 		try:
