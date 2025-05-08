@@ -3,6 +3,9 @@
 ## TBD
 - Removed docs and body-docs script
 
+## 2.1.2
+- Fixed issue with using `__list` in multi-service script where only the first service had the correct url assigned.
+
 ## 2.1.1
 - Made a fix for the URI generated to map internal service instance nouns. Prior to this fix, it was only possible to run multiple services in a single node if they didn't interact with each other.
 

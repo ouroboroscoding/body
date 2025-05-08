@@ -5,7 +5,7 @@ with open('README.md', 'r') as oF:
 
 setup(
 	name='body_oc',
-	version='2.1.1',
+	version='2.1.2',
 	description='Body contains shared concepts among all body parts',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
