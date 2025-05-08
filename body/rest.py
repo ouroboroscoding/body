@@ -578,7 +578,7 @@ class REST(bottle.Bottle):
 
 				# Register it with bottle
 				self.route(
-					bOne and sUri or '/%s%s' % ( oInstance.name, sUri ),
+					bOne and sUri or ('/%s%s' % ( oInstance.name, sUri )),
 					[ sMethod, 'OPTIONS' ],
 					_Route(
 						oInstance.name,
@@ -591,11 +591,11 @@ class REST(bottle.Bottle):
 			if lists:
 
 				# If it's True
-				lists = '/%s' % (lists is True and '__list' or str(lists))
+				sList = '/%s' % (lists is True and '__list' or str(lists))
 
 				# Add the list read route
 				self.route(
-					bOne and lists or '/%s%s' % ( oInstance.name, lists),
+					bOne and sList or ('/%s%s' % ( oInstance.name, sList)),
 					[ 'GET', 'OPTIONS' ],
 					_Route(oInstance.name, True)
 				)
