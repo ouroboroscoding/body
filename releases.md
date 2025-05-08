@@ -3,6 +3,9 @@
 ## TBD
 - Removed docs and body-docs script
 
+## 2.1.1
+- Made a fix for the URI generated to map internal service instance nouns. Prior to this fix, it was only possible to run multiple services in a single node if they didn't interact with each other.
+
 ## 2.1.0
 - Removed `register_services` as data is generated automatically.
 - Added `rest` method on `Service` to automatically create a `REST` instance using the instance of the `Service`.

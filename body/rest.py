@@ -137,6 +137,9 @@ class _Route(object):
 			None
 		"""
 
+		# Set the name for the route
+		self.__name__ = callback == True and 'True' or str(callback)
+
 		# Store the callback
 		self.__callback = callback
 
