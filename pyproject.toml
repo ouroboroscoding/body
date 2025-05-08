@@ -1,0 +1,36 @@
+[build-system]
+requires = [ "hatchling" ]
+build-backend = "hatchling.build"
+
+[project]
+name = "body_oc"
+version = "2.1.1"
+description = "Body contains shared concepts among all body parts"
+authors = [
+    {name = "Chris Nasr - Ouroboros Coding Inc.", email = "chris@ouroboroscoding.com"}
+]
+maintainers = [
+    {name = "Chris Nasr - Ouroboros Coding Inc.", email = "chris@ouroboroscoding.com"}
+]
+license-files = [ "LICENSE" ]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+	'bottle>=0.13.2,<0.14',
+	'gunicorn>=23.0.0,<23.1',
+	'jobject>=1.0.3,<1.1.0',
+	'jsonb>=1.0.0,<1.1.0',
+	'memory-oc>=1.0.0,<1.1',
+	'strings-oc>=1.0.7,<1.1',
+	'requests>=2.32.3,<2.33',
+	'undefined-oc>=1.0.0,<1.1',
+	'tools-oc>=1.2.5,<1.3'
+]
+
+[project.urls]
+Source = "https://github.com/ouroboroscoding/body"
+Tracker = "https://github.com/ouroboroscoding/body/issues"
+
+[tool.hatch.build]
+packages = [ "body" ]
+include = [ 'docs/*', 'docs/templates/*.j2' ]
