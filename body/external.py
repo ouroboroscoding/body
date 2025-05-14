@@ -27,7 +27,7 @@ from time import sleep
 
 # Pip imports
 import requests
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, MutableMapping
 
 # Local imports
 from body import errors
@@ -49,8 +49,7 @@ __action_to_request = {
 def create(
 	service: str,
 	path: str,
-	req: dict = {},
-	headers: dict = undefined
+	req: dict = {}
 ):
 	"""Create
 
@@ -60,18 +59,16 @@ def create(
 		service (str): The service to call
 		path (str): The path on the service
 		req (dict): The request details, which can include 'data' and 'session'
-		headers (dict): Any additional headers to add to the request
 
 	Returns:
 		Response
 	"""
-	return request(service, 'create', path, req, headers)
+	return request(service, 'create', path, req)
 
 def delete(
 	service: str,
 	path: str,
-	req: dict = {},
-	headers: dict = undefined
+	req: dict = {}
 ):
 	"""Delete
 
@@ -81,18 +78,16 @@ def delete(
 		service (str): The service to call
 		path (str): The path on the service
 		req (dict): The request details, which can include 'data' and 'session'
-		headers (dict): Any additional headers to add to the request
 
 	Returns:
 		Response
 	"""
-	return request(service, 'delete', path, req, headers)
+	return request(service, 'delete', path, req)
 
 def read(
 	service: str,
 	path: str,
-	req: dict = {},
-	headers: dict = undefined
+	req: dict = {}
 ):
 	"""Read
 
@@ -102,12 +97,11 @@ def read(
 		service (str): The service to call
 		path (str): The path on the service
 		req (dict): The request details, which can include 'data' and 'session'
-		headers (dict): Any additional headers to add to the request
 
 	Returns:
 		Response
 	"""
-	return request(service, 'read', path, req, headers)
+	return request(service, 'read', path, req)
 
 def register_service(name: str, instance: Service):
 	"""Register Service
@@ -243,8 +237,7 @@ def request(
 	service: str,
 	action: str,
 	path: str,
-	req: dict = {},
-	headers: dict = undefined
+	req: MutableMapping = {}
 ):
 	"""Request
 
@@ -255,7 +248,6 @@ def request(
 		action (str): The action to take on the service
 		path (str): The path of the request
 		req (dict): The request details: 'data', 'session', and 'enviroment'
-		headers (dict): Any additional headers to add to the request
 
 	Raises:
 		KeyError: if the service or action don't exist
@@ -272,9 +264,7 @@ def request(
 
 	# Init the data and headers
 	sData = ''
-	dHeaders = (headers is not undefined and isinstance(headers, dict)) and \
-				copy(headers) or \
-				{}
+	dHeaders = {}
 
 	# Add the default content length and type
 	dHeaders['Content-Length'] = '0'
@@ -294,7 +284,7 @@ def request(
 	# If we got a service instance
 	if 'instance' in __services[service]:
 
-		# Try to call the method
+		# Try to find the method
 		try:
 			f = __services[service]['paths'][path][action]
 
@@ -326,6 +316,11 @@ def request(
 
 	# Else, this is an external service
 	else:
+
+		# If we received any meta vars
+		if 'meta' in req and req['meta']:
+			for k,v in req['meta'].items():
+				dHeaders['X-Body-%s' % k] = v
 
 		# Loop requests so we don't fail just because of a network hiccup
 		iAttempts = 0
@@ -408,8 +403,7 @@ def service_info(name: str) -> dict:
 def update(
 	service: str,
 	path: str,
-	req: dict = {},
-	headers: dict = undefined
+	req: dict = {}
 ):
 	"""Update
 
@@ -419,9 +413,8 @@ def update(
 		service (str): The service to call
 		path (str): The path on the service
 		req (dict): The request details, which can include 'data' and 'session'
-		headers (dict): Any additional headers to add to the request
 
 	Returns:
 		Response
 	"""
-	return request(service, 'update', path, req, headers)
+	return request(service, 'update', path, req)
