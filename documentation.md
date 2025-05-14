@@ -766,8 +766,12 @@ class MyService(Service):
 
 `session` an instance of a [Memory](https://pypi.org/project/memory-oc/)
 
-`environment` a `dict` of environment variables, see
-[Bottle](https://bottlepy.org/docs/dev/tutorial.html#wsgi-environment).
+`meta` which is additional string values stored by string keys. This data is
+passed via headers when communication from one service to another in separate
+processes, so assume if you can't put it into a header, you can't put it into
+`meta`. It should be used by other services that wish to pass along non-data
+information, such as internal keys, authorization, etc. It replaces setting
+headers directly and making it impossible to decouple services form the medium.
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) /
 [requests](#requests) ]
