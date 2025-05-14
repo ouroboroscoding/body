@@ -203,10 +203,7 @@ class _Route(object):
 
 		# Initialise the request details with the bottle request and response
 		#	objects, allowing requests direct access to low level data
-		oReq = jobject({
-			'request': bottle.request,
-			'response': bottle.response
-		})
+		oReq = jobject({ })
 
 		# If we got a Read request and the data is in the GET
 		if bottle.request.method == 'GET' and 'd' in bottle.request.query:
@@ -271,6 +268,14 @@ class _Route(object):
 			else:
 				oReq.session.extend()
 
+		# Step through all headers
+		for k in bottle.request.headers:
+			if k[0:7] == 'X-Body-':
+				try:
+					oReq.meta[k[7:]] = bottle.request.headers[k]
+				except AttributeError:
+					oReq.meta = { k[7:]: bottle.request.headers[k] }
+
 		# In case the service crashes
 		try:
 
@@ -281,7 +286,7 @@ class _Route(object):
 					self.__services[self._service],
 					bottle.request.method,
 					bottle.request.path,
-					str('data' in oReq and jsonb.encode(oReq.data, 2) or 'None')
+					(oReq and jsonb.encode(oReq, 2) or 'None')
 				))
 
 			# If this is a list request

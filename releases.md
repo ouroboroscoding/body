@@ -1,7 +1,9 @@
 # body_oc releases
 
-## TBD
-- Removed docs and body-docs script
+## 2.2.0
+- Removed docs and body-docs script, currently being worked on in an independant module called `body_docs`.
+- Added a system for adding key / value pairs to requests that can be passed directly, or via X-* headers.
+- Removed the ability to set headers and access bottle.request / bottle.response in order to decouple Body and the requests from knowing they are being called via HTTP, or from within the same process, or any other way created in the future.
 
 ## 2.1.2
 - Fixed issue with using `__list` in multi-service script where only the first service had the correct url assigned.
