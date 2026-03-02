@@ -36,13 +36,29 @@ class Service(abc.ABC):
 	)
 	"""Regular Expression to match to valid service noun method"""
 
+	additional_routes: List[tuple] | None = None
+	"""Additional Routes
+
+	Additional URIs can be passed to the server to handle things outside of
+	the Service architecture.
+
+	class SomeService(Service):
+		pass
+
+	def custom():
+		return "<html />"
+
+	SomeService.additional_routes = [ ( '/custom', 'GET', custom ) ]
+	"""
+
 	def __init__(self, name: str | None = None):
 		"""Constructor
 
 		Initialises the service
 
 		Arguments:
-			name (str): Optional, uses __class__.__name__.lower() if not set.
+			name (str): Optional, uses __class__.__name__.lower() if not set
+
 		Returns:
 			Service
 		"""

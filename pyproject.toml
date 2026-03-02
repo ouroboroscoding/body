@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "body_oc"
-version = "2.2.0"
+version = "2.2.1"
 description = "Body contains shared concepts among all body parts"
 authors = [
     {name = "Chris Nasr - Ouroboros Coding Inc.", email = "chris@ouroboroscoding.com"}
