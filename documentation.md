@@ -554,7 +554,7 @@ def errors(error):
 
 # Only run if called directly
 if __name__ == '__main__':
-	Assessment().rest(
+	MyService().rest(
 		on_errors = errors
 	)
 ```
@@ -575,7 +575,7 @@ system you can create `REST` directly and get access to the http server instance
 ```python
 from body.rest import REST
 REST(
-	[ Assessment() ],
+	[ MyService() ],
 	cors = [ 'mydomain.com', 'myotherdomain.com' ],
 	on_errors = errors,
 	verbose = True
@@ -590,6 +590,30 @@ REST(
 The run command corresponds directly to the
 [run()](https://bottlepy.org/docs/dev/api.html) command of Bottle and will
 support all the same arguments.
+
+Additionally, you can override the Service.additional_routes variable to add
+custom [Bottle](https://bottlepy.org/docs/dev/) routes upon any call to REST.
+
+```python
+def test_route():
+	pass
+
+MyService.additional_routes = [
+	( '/test', 'GET', test_route )
+]
+```
+
+or
+
+```python
+def test_route():
+	pass
+
+class MyService(Service):
+	additional_routes = [
+		( '/test', 'GET', test_route )
+	]
+```
 
 [ [top](#body_oc) / [contents](#contents) ]
 
@@ -699,6 +723,30 @@ from body import Service
 class MyService(Service):
   def reset():
 	pass
+```
+
+[ [top](#body_oc) / [contents](#contents) / [service](#service) ]
+
+### additional_routes
+
+Previously mentioned under [Low level http](#low-level-http), we can add simple
+[Bottle](https://bottlepy.org/docs/dev/routing.html#explicit-routing-configuration)
+routes to our services that will automatically be added to any call to REST that
+uses the instance. This includes adding the necessary service prefix, and the
+OPTIONS type to the methods.
+
+```python
+from body import Service
+from bottle import request, response
+
+def test_route():
+	print(request.query)
+	return '<html />'
+
+class MyServie(Service):
+	additional_routes = [
+		( '/test', 'GET', test_route )
+	]
 ```
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) ]
