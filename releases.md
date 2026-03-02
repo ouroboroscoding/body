@@ -1,6 +1,6 @@
 # body_oc releases
 
-## 2.2.?
+## 2.2.1
 - Added `additional_routes` static member variable to `Service` class. Children of `Service` can update the variable to let `REST` know to load these additional routes as normal `bottle` routes, including any service prefix. They will be loaded as routes after the regular service routes, so be careful not to accidently overwrite any existing routes.
 
 ## 2.2.0
