@@ -535,7 +535,7 @@ class REST(bottle.Bottle):
 		# Call the parent constructor first so the object is setup
 		super(REST, self).__init__()
 
-		# If the instance is not a Service
+		# If the instances are not a list
 		if not isinstance(instances, list):
 			raise TypeError(
 				'instances', 'must be a list', sys._getframe().f_code.co_name
@@ -591,6 +591,17 @@ class REST(bottle.Bottle):
 						uri = (list and sMethod == 'GET') and sUri or None
 					)
 				)
+
+			# If we have additional static routes
+			if oInstance.additional_routes is not None:
+				for l in oInstance.additional_routes:
+					self.route(
+						bOne and l[0] or f'/{oInstance.name}{l[0]}',
+						isinstance(l[1], list) \
+							and l[1][:] + [ 'OPTIONS' ] \
+							or [ l[1], 'OPTIONS' ],
+						l[2]
+					)
 
 			# If we have a request for a list of requests
 			if lists:

@@ -1,5 +1,8 @@
 # body_oc releases
 
+## 2.2.?
+- Added `additional_routes` static member variable to `Service` class. Children of `Service` can update the variable to let `REST` know to load these additional routes as normal `bottle` routes, including any service prefix. They will be loaded as routes after the regular service routes, so be careful not to accidently overwrite any existing routes.
+
 ## 2.2.0
 - Removed docs and body-docs script, currently being worked on in an independant module called `body_docs`.
 - Added a system for adding key / value pairs to requests that can be passed directly, or via X-* headers.
