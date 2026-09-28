@@ -53,34 +53,35 @@ immediately after.
 ```json
 {
   "body": {
-	"rest": {
-	  "allowed": [ "mydomain.com" ],
-	  "default": {
-		"domain": "localhost",
-		"host": "0.0.0.0",
-		"protocol": "http"
-	  },
-	  "services": {
-		"myservice": { "port": 8000, "workers": 10 },
-		"myotherservice": { "port": 8001, "workers": 2 }
-	  },
-	  "verbose": true
-	}
+    "rest": {
+      "allowed": [ "mydomain.com" ],
+      "default": {
+        "domain": "localhost",
+        "host": "0.0.0.0",
+        "protocol": "http"
+      },
+	  "monitor": [ "admin", "Gcg6sKMY" ],
+      "services": {
+        "myservice": { "port": 8000, "workers": 10 },
+        "myotherservice": { "port": 8001, "workers": 2 }
+      },
+      "verbose": true
+    }
   },
 
   "memory": {
-	"redis": "session"
+    "redis": "session"
   },
 
   "redis": {
-	"records": {
-	  "host": "redis.mydomain.com",
-	  "db": 0
-	},
-	"session": {
-	  "host": "redis.mydomain.com",
-	  "db": 1
-	}
+    "records": {
+      "host": "redis.mydomain.com",
+      "db": 0
+    },
+    "session": {
+      "host": "redis.mydomain.com",
+      "db": 1
+    }
   }
 }
 ```
@@ -96,14 +97,14 @@ software, the memory and body settings.
 #### redis section
 ```json
   "redis": {
-	"records": {
-	  "host": "redis.mydomain.com",
-	  "db": 0
-	},
-	"session": {
-	  "host": "redis.mydomain.com",
-	  "db": 1
-	}
+    "records": {
+      "host": "redis.mydomain.com",
+      "db": 0
+    },
+    "session": {
+      "host": "redis.mydomain.com",
+      "db": 1
+    }
   }
 ```
 Each object under the "redis" section represents a named [Redis](https://redis.io/)
@@ -120,7 +121,7 @@ list on [Connecting to Redis](https://redis.readthedocs.io/en/stable/connections
 #### memory section
 ```json
   "memory": {
-	"redis": "session"
+    "redis": "session"
   }
 ```
 [memory_oc](https://pypi.org/project/memory_oc/) is an Ouroboros Coding module
@@ -138,19 +139,20 @@ to use the **session** one.
 #### body section
 ```json
   "body": {
-	"rest": {
-	  "allowed": [ "mydomain.com" ],
-	  "default": {
-		"domain": "localhost",
-		"host": "0.0.0.0",
-		"protocol": "http"
-	  },
-	  "services": {
-		"myservice": { "port": 8000, "workers": 10 },
-		"myotherservice": { "port": 8001, "workers": 2 }
-	  },
-	  "verbose": true
-	}
+    "rest": {
+      "allowed": [ "mydomain.com" ],
+      "default": {
+        "domain": "localhost",
+        "host": "0.0.0.0",
+        "protocol": "http"
+      },
+      "monitor": [ "admin", "Gcg6sKMY" ],
+      "services": {
+        "myservice": { "port": 8000, "workers": 10 },
+        "myotherservice": { "port": 8001, "workers": 2 }
+      },
+      "verbose": true
+    }
   }
 ```
 
@@ -164,7 +166,7 @@ even `https://admin.mydomain.com/`.
 
 To limit to a specific subdomain, change "allowed" to be more specific
 ```json
-	  "allowed": [ "admin.mydomain.com" ]
+      "allowed": [ "admin.mydomain.com" ]
 ```
 this way `https://admin.mydomain.com/` and `https://bob.admin.mydomain.com/`
 work, but not `https://mydomain.com/`.
@@ -173,6 +175,15 @@ work, but not `https://mydomain.com/`.
 [module configuration](#module-configuration) /
 [configuration sections](#configuration-sections) /
 [body section](#body-section) ]
+
+##### body.rest.monitor
+If set, adds a `/__monitor` request to the server accessible using the `user`
+(first string) and `password` (second string) which provides details about the
+currently running server.
+
+```json
+      "monitor": [ "admin", "Gcg6sKMY" ],
+```
 
 ##### body.rest.services
 In order to know how to both run and connect to
@@ -191,28 +202,28 @@ simplistic initial launch setup. As we launch more servers and spread the load,
 you might have the config on the **myservice** server be something more like
 this where **myotherservice** is running on another server inside the network.
 ```json
-	  "services": {
-		"myservice": {
-		  "domain": "localhost",
-		  "host": "192.168.0.1",
-		  "port": 80,
-		  "protocol": "http",
-		  "workers": 10
-		},
-		"myotherservice": {
-		  "domain": "myotherservice.mydomain",
-		  "port": 80,
-		  "protocol": "http"
-		}
-	  }
+      "services": {
+        "myservice": {
+          "domain": "localhost",
+          "host": "192.168.0.1",
+          "port": 80,
+          "protocol": "http",
+          "workers": 10
+        },
+        "myotherservice": {
+          "domain": "myotherservice.mydomain",
+          "port": 80,
+          "protocol": "http"
+        }
+      }
 ```
 ...or like this, where it's running outside the network
 ```json
-		"myotherservice": {
-		  "domain": "myotherservice.mydomain.com",
-		  "port": 443,
-		  "protocol": "https"
-		}
+        "myotherservice": {
+          "domain": "myotherservice.mydomain.com",
+          "port": 443,
+          "protocol": "https"
+        }
 ```
 
 [ [top](#body_oc) / [contents](#contents) /
@@ -527,7 +538,14 @@ The `rest` method provides a way to take a service and connect it to the
 internet via http requests. It uses the services request methods and connects
 them to the appropriate POST / GET / PUT / DELETE methods.
 
+When using body as a REST server, you MUST make sure to monkey patch gevent as
+the first thing in your code. Nothing else can run / be imported before the
+`patch_all()` call
+
 ```python
+from gevent import monkey
+monkey.patch_all()
+
 from body import Service
 import config
 
