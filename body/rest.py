@@ -15,8 +15,8 @@ __created__		= "2023-03-17"
 __all__ = [ 'bottle', 'REST' ]
 
 # Make sure we patched
-import gevent
-if not gevent.monkey.is_module_patched('socket'):
+from gevent import monkey, Timeout as GTimeout
+if not monkey.is_module_patched('socket'):
 	raise RuntimeError(
 		'gevent monkey patching was not applied before importing this '
 		'module. Call gevent.monkey.patch_all() as the very first line of '
@@ -746,8 +746,8 @@ class TimeoutHandler(WSGIHandler):
 		if self.timeout_seconds is None:
 			return super().handle()
 
-		# Set the Timeout
-		self._timeout = gevent.Timeout.start_new(self.timeout_seconds)
+		# Set the gevent Timeout
+		self._timeout = GTimeout.start_new(self.timeout_seconds)
 
 		# Handle the request
 		try:
