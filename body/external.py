@@ -19,7 +19,6 @@ __all__ = [
 from config import config
 from jobject import jobject
 import jsonb
-import undefined
 
 # Python imports
 from copy import copy
