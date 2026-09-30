@@ -14,6 +14,15 @@ __created__		= "2023-03-17"
 # Limit exports
 __all__ = [ 'bottle', 'REST' ]
 
+# Make sure we patched
+from gevent import monkey, Timeout as GTimeout
+if not monkey.is_module_patched('socket'):
+	raise RuntimeError(
+		'gevent monkey patching was not applied before importing this '
+		'module. Call gevent.monkey.patch_all() as the very first line of '
+		'your entrypoint.'
+	)
+
 # Ouroboros imports
 from jobject import jobject
 import jsonb
@@ -23,6 +32,7 @@ from tools import clone
 # Python imports
 from collections.abc import Callable
 from datetime import datetime
+import logging
 import re
 import sys
 import traceback
@@ -30,6 +40,8 @@ from typing import List, Literal, TYPE_CHECKING
 
 # Pip imports
 import bottle
+from gevent.pool import Pool
+from gevent.pywsgi import WSGIHandler, WSGIServer
 
 # Local imports
 from body.errors import \
@@ -508,7 +520,8 @@ class REST(bottle.Bottle):
 		cors: List[str] | None = None,
 		lists: str | Literal[True] = True,
 		on_errors: Callable | None = None,
-		verbose: bool = False
+		verbose: bool = False,
+		monitor: list | None = None
 	):
 		"""Constructor
 
@@ -524,6 +537,8 @@ class REST(bottle.Bottle):
 				request throws an exception
 			verbose (bool): Optional, set to True to print out each request and
 				and response
+			monitor (list): If set, must be two strings for user and password
+				which are used to validate the request
 
 		Raises:
 			ValueError
@@ -567,6 +582,17 @@ class REST(bottle.Bottle):
 
 		# Set the verbose mode
 		_Route.verbose(verbose)
+
+		# Add the monitor path if needed
+		if monitor is not None:
+			check = lambda u, p: u == monitor[0] and p == monitor[1]
+			self.route(
+				'/__monitor',
+				[ 'GET', 'OPTIONS' ],
+				bottle.auth_basic(
+					lambda u, p: u == monitor[0] and p == monitor[1]
+				)(self.monitor)
+			)
 
 		# Step through each service
 		bOne = len(instances) == 1
@@ -616,24 +642,45 @@ class REST(bottle.Bottle):
 					_Route(oInstance.name, True)
 				)
 
+	# monitor method
+	def monitor(self) -> str:
+		"""Monitor
+
+		Displays data relevant to the webserver
+
+		Returns:
+			str
+		"""
+
+		# If we have a pool
+		sPool = (
+			self._pool
+			and f'{self._pool.size - self._pool.free_count()} / {self._pool.size}'
+			or 'No pool'
+		)
+
+		# Return the info
+		return (
+			f'Pool used: {sPool}\n'
+		)
+
 	# run method
-	def run(self, server = 'gunicorn', host = '127.0.0.1', port = 8080,
-			reloader = False, interval = 1, quiet = False, plugins = None,
-			debug = None, maxfile = 20971520, **kargs):
+	def run(self, host = '127.0.0.1', port = 8080, quiet = False,
+			plugins = None, debug = False, maxfile = 20971520, workers = 100,
+			timeout = 30, **kargs):
 		"""Run
 
 		Overrides Bottle's run to default gunicorn and other fields
 
 		Arguments:
-			server (str): Server adapter to use
 			host (str): Server address to bind to
 			port (int): Server port to bind to
-			reloader (bool): Start auto-reloading server?
-			interval (int): Auto-reloader interval in seconds
 			quiet (bool): Suppress output to stdout and stderr?
 			plugins (list): List of plugins to the server
 			debug (bool): Debug mode
 			maxfile (int): Maximum size of requests
+			workers (uint): The pool of concurrent connections
+			timeout (uint): The maximum time for any request
 
 		Returns:
 			None
@@ -642,9 +689,87 @@ class REST(bottle.Bottle):
 		# Set the max file size
 		bottle.BaseRequest.MEMFILE_MAX = maxfile
 
-		# Call bottle run
-		bottle.run(
-			app = self, server = server, host = host, port = port,
-			reloader = reloader, interval = interval, quiet = quiet,
-			plugins = plugins, debug = debug, **kargs
+		# Install plugins if any
+		if plugins:
+			self.install(*plugins)
+		if debug:
+			bottle.debug(True)
+
+		# Construct the gevent Pool
+		self._pool = Pool(size = workers)
+
+		# Set the timeout
+		TimeoutHandler.timeout_seconds = timeout
+
+		# Create the WSGI server with the given host/port/pool
+		oServer = WSGIServer(
+			(host, port),
+			self,
+			spawn = self._pool,
+			handler_class = TimeoutHandler,
+			log = None if quiet else logging.getLogger('gevent.wsgi'),
+			**kargs
 		)
+
+		# If we want to see the start info
+		if not quiet:
+			print(
+				f'REST serving on http://{host}:{port} '
+				f'(concurrency limited to {workers})'
+			)
+
+		# Run the webserver
+		try:
+			oServer.serve_forever()
+		except KeyboardInterrupt:
+			oServer.stop()
+
+class TimeoutHandler(WSGIHandler):
+	"""Timeout Handler
+
+	Overrides WSGIHandler in order to be able to set a timeout explicitly
+
+	Extends:
+		WSGIHandler
+	"""
+
+	timeout_seconds = None
+	"""Timeout Seconds"""
+
+	def handle(self):
+		"""Handle
+
+		Handles any request
+		"""
+
+		# If we don't have a timeout, default to regular handle
+		if self.timeout_seconds is None:
+			return super().handle()
+
+		# Set the gevent Timeout
+		self._timeout = GTimeout.start_new(self.timeout_seconds)
+
+		# Handle the request
+		try:
+			super().handle()
+		finally:
+			self._timeout.cancel()
+
+	def handle_error(self, t, v, tb):
+		"""Handle Error
+
+		Called if there's any error in the handling of a request
+		"""
+
+		# Check if the event if the timeout
+		if getattr(self, '_timeout', None) is v:
+			try:
+				self.start_response('504 Gateway Timeout',
+									[('Content-Type', 'text/plain')])
+				self.write(b'Request timed out\n')
+			except Exception:
+				pass
+
+		# Else, default to regular handle_error
+		else:
+			super().handle_error(t, v, tb)

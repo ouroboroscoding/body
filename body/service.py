@@ -197,7 +197,8 @@ class Service(abc.ABC):
 			instances = [ self ],
 			cors = config.body.rest.allowed('localhost'),
 			on_errors = on_errors,
-			verbose = config.body.rest.verbose(False)
+			verbose = config.body.rest.verbose(False),
+			monitor = config.body.rest.monitor(None)
 		)
 
 		# If there's any additional

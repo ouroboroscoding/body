@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "body_oc"
-version = "2.2.1"
+version = "2.2.2"
 description = "Body contains shared concepts among all body parts"
 authors = [
     {name = "Chris Nasr - Ouroboros Coding Inc.", email = "chris@ouroboroscoding.com"}
@@ -16,8 +16,8 @@ license-files = [ "LICENSE" ]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-	'bottle>=0.13.2,<0.14',
-	'gunicorn>=23.0.0,<23.1',
+	'bottle>=0.13.4,<0.14',
+	'gevent>=26.9.0,<26.10',
 	'jobject>=1.0.3,<1.1.0',
 	'jsonb>=1.0.0,<1.1.0',
 	'memory-oc>=1.0.1,<1.1',
