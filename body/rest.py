@@ -12,7 +12,7 @@ __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-17"
 
 # Limit exports
-__all__ = [ 'bottle', 'REST' ]
+__all__ = [ 'bottle', 'clear_session_cookie', 'REST', 'set_session_cookie' ]
 
 # Make sure we patched
 from gevent import monkey, Timeout as GTimeout
@@ -24,10 +24,12 @@ if not monkey.is_module_patched('socket'):
 	)
 
 # Ouroboros imports
+import config
 from jobject import jobject
 import jsonb
 import memory
 from tools import clone
+import undefined
 
 # Python imports
 from collections.abc import Callable
@@ -37,6 +39,7 @@ import re
 import sys
 import traceback
 from typing import List, Literal, TYPE_CHECKING
+import warnings
 
 # Pip imports
 import bottle
@@ -44,6 +47,7 @@ from gevent.pool import Pool
 from gevent.pywsgi import WSGIHandler, WSGIServer
 
 # Local imports
+from body.constants import SECONDS_365_DAYS
 from body.errors import \
 	REST_AUTHORIZATION, REST_CONTENT_TYPE, REST_LIST_INVALID_URI, \
 	REST_LIST_TO_LONG, REST_REQUEST_DATA, SERVICE_CRASHED, SERVICE_NO_DATA, \
@@ -51,6 +55,9 @@ from body.errors import \
 from body.response import Error, Response, ResponseException
 if TYPE_CHECKING:
 	from body.service import Service
+
+# Global vars
+_cookie = undefined
 
 class _Route(object):
 	"""Route
@@ -70,17 +77,25 @@ class _Route(object):
 	}
 	"""Maps key error variables to their response error code"""
 
+	__method_to_action = {
+		'POST': 'create',
+		'DELETE': 'delete',
+		'GET': 'read',
+		'PUT': 'update'
+	}
+	"""Maps HTTP methods to service actions"""
+
 	__on_error = None
 	"""On Error
 	Function called when a service request raises an exception
 	"""
 
-	__services = []
+	__services = [ ]
 	"""Services
 	Minimizes space usage on service names repeating
 	"""
 
-	__uris: dict = {}
+	__uris: dict = { }
 	"""URIs
 	used to keep track of the uris to callbacks for the purposes of __list calls
 	"""
@@ -89,16 +104,13 @@ class _Route(object):
 	"""The verbose mode, set to True to view requests/responses"""
 
 	@classmethod
-	def cors(cls, cors):
+	def cors(cls, cors: re.Pattern):
 		"""CORs
 
 		Sets the regular expression used to validate domains making requests
 
 		Arguments:
-			pattern (Re.Pattern): A compiled regular expression
-
-		Returns:
-			None
+			pattern (re.Pattern): A compiled regular expression
 		"""
 		cls.__cors = cors
 
@@ -184,6 +196,7 @@ class _Route(object):
 			# Add the current origin as acceptable
 			bottle.response.headers['Access-Control-Allow-Origin'] = \
 				bottle.request.headers['origin']
+			bottle.response.headers['Access-Control-Allow-Credentials'] = 'true'
 			bottle.response.headers['Vary'] = 'Origin'
 
 		# If the request is OPTIONS
@@ -263,22 +276,49 @@ class _Route(object):
 					'%s\n%s' % ( sData, str(e) )
 				).to_json()
 
-		# If the request sent a authorization token
-		if 'Authorization' in bottle.request.headers:
+		# Check for auth
+		bCookie = False
+		mAuth = False
+
+		# Do we have a session cookie name and was it sent?
+		if _cookie and bottle.request.cookies.get(_cookie, False):
+			bCookie = True
+			mAuth = bottle.request.cookies[_cookie]
+
+		# Else, If the request sent a authorization token
+		elif 'Authorization' in bottle.request.headers:
+			mAuth = bottle.request.headers['Authorization']
+
+		# If we have an auth token
+		if mAuth:
 
 			# Get the session from the Authorization token
-			oReq.session = memory.load(bottle.request.headers['Authorization'])
+			oReq.session = memory.load(mAuth)
 
-			# If the session is not found
-			if not oReq.session:
+			# If the session is found
+			if oReq.session:
+
+				# If we have a cookie
+				if bCookie:
+
+					# Extend the cookie
+					set_session_cookie(mAuth, oReq.session.ttl())
+
+				# Extend the session itself
+				oReq.session.extend()
+
+			# Else, session has expired / been deleted
+			else:
+
+				# If we had a cookie, delete it
+				if bCookie:
+					clear_session_cookie()
+
+				# Return the response as 401
 				bottle.response.status = 401
 				return Error(
 					REST_AUTHORIZATION, 'Unauthorized'
 				).to_json()
-
-			# Else, extend the session's ttl
-			else:
-				oReq.session.extend()
 
 		# Step through all headers
 		for k in bottle.request.headers:
@@ -296,7 +336,7 @@ class _Route(object):
 				print('%s REQUEST %s %s %s %s' % (
 					str(datetime.now()),
 					self.__services[self._service],
-					bottle.request.method,
+					self.__method_to_action[bottle.request.method],
 					bottle.request.path,
 					(oReq and jsonb.encode(oReq, 2) or 'None')
 				))
@@ -489,7 +529,7 @@ class _Route(object):
 			print('%s RETURNING %s %s %s %s' % (
 				str(datetime.now()),
 				self.__services[self._service],
-				bottle.request.method,
+				self.__method_to_action[bottle.request.method],
 				bottle.request.path,
 				jsonb.encode(oResponse.to_dict(), 2)
 			)
@@ -510,18 +550,18 @@ class REST(bottle.Bottle):
 	__action_to_method = {
 		'create': 'POST',
 		'delete': 'DELETE',
-		'read':   'GET',
+		'read': 'GET',
 		'update': 'PUT'
 	}
-	"""Maps HTTP methods to service actions"""
+	"""Maps service actions to HTTP methods"""
 
 	def __init__(self,
 		instances: List[Service],
-		cors: List[str] | None = None,
-		lists: str | Literal[True] = True,
+		cors: List[str] = undefined,
+		lists: str | Literal[True] = undefined,
 		on_errors: Callable | None = None,
-		verbose: bool = False,
-		monitor: list | None = None
+		verbose: bool = undefined,
+		monitor: list = undefined
 	):
 		"""Constructor
 
@@ -547,6 +587,8 @@ class REST(bottle.Bottle):
 			RestService
 		"""
 
+		global _cookie
+
 		# Call the parent constructor first so the object is setup
 		super(REST, self).__init__()
 
@@ -556,42 +598,105 @@ class REST(bottle.Bottle):
 				'instances', 'must be a list', sys._getframe().f_code.co_name
 			)
 
-		# If cors, compile it
-		if cors:
+		# If deprecated arguments sent
+		if cors is not undefined:
+			warnings.warn(
+				( 'Setting cors on REST.__init__ is deprecated, set '
+				'config.body.rest.allowed instead' ),
+				DeprecationWarning,
+				stacklevel = 2
+			)
+		if lists is not undefined:
+			warnings.warn(
+				( 'Setting lists on REST.__init__ is deprecated, set '
+				'config.body.rest.lists instead' ),
+				DeprecationWarning,
+				stacklevel = 2
+			)
+		if verbose is not undefined:
+			warnings.warn(
+				( 'Setting verbose on REST.__init__ is deprecated, set '
+				'config.body.rest.verbose instead' ),
+				DeprecationWarning,
+				stacklevel = 2
+			)
+		if monitor is not undefined:
+			warnings.warn(
+				( 'Setting monitor on REST.__init__ is deprecated, set '
+				'config.body.rest.monitor instead' ),
+				DeprecationWarning,
+				stacklevel = 2
+			)
+
+		# Get necessary config values
+		dConf = config.body.rest({
+			'allowed': [ 'localhost' ],
+			'cookie': False,
+			'lists': True,
+			'monitor': None,
+			'verbose': False
+		})
+
+		# If cors
+		if dConf['allowed']:
 
 			# If it's not a list
-			if not isinstance(cors, list):
-				raise RuntimeError('REST.cors must be a list')
+			if( isinstance(dConf['allowed'], str) or
+				not isinstance(dConf['allowed'], list) ):
+				raise RuntimeError('config.body.rest.allowed must be a list')
 
 			# If we only have one
-			if len(cors) == 1:
-				cors = cors[0].replace('.', '\\.')
-			else:
-				cors = '(?:%s)' % '|'.join([
-					s.replace('.', '\\.')
-					for s in cors
-				])
-			cors = re.compile('https?://(.*\\.)?%s' % cors)
+			if len(dConf['allowed']) == 1:
+				sAllowed = dConf['allowed'][0].replace('.', '\\.')
 
-			# Set it
-			_Route.cors(cors)
+			# Else, conver the list into a grouping of possible values
+			else:
+				sAllowed = '(?:%s)' % '|'.join([
+					s.replace('.', '\\.')
+					for s in dConf['allowed']
+				])
+
+			# Generate the full regex
+			sRegex = f'https?://(.*\\.)?{sAllowed}'
+			if dConf['verbose']:
+				print(f'REST CORS: {sRegex}')
+
+			# Compile the regex and set it
+			_Route.cors(re.compile(sRegex))
 
 		# If we have an error handler
 		if on_errors:
 			_Route.on_error(on_errors)
 
+		# If we have a cookie name, set the global var
+		_cookie = dConf['cookie']
+		if _cookie and dConf['verbose']:
+			print(f'REST session cookie: {_cookie}')
+
 		# Set the verbose mode
-		_Route.verbose(verbose)
+		_Route.verbose(dConf['verbose'])
 
 		# Add the monitor path if needed
-		if monitor is not None:
-			check = lambda u, p: u == monitor[0] and p == monitor[1]
+		if dConf['monitor'] is not None:
+
+			# Create the check method
+			check = ( lambda u, p: u == dConf['monitor'][0] and
+									p == dConf['monitor'][1] )
+
+			# Route
+			sRoute = (
+				(len(dConf['monitor']) < 3 or dConf['monitor'][2] is True)
+					and '/__monitor'
+					or f'/{dConf['monitor'][2]}'
+			)
+			if dConf['verbose']:
+				print(f'REST {sRoute} route added')
+
+			# Add the route
 			self.route(
-				'/__monitor',
+				sRoute,
 				[ 'GET', 'OPTIONS' ],
-				bottle.auth_basic(
-					lambda u, p: u == monitor[0] and p == monitor[1]
-				)(self.monitor)
+				bottle.auth_basic(check)(self.monitor)
 			)
 
 		# Step through each service
@@ -630,10 +735,14 @@ class REST(bottle.Bottle):
 					)
 
 			# If we have a request for a list of requests
-			if lists:
+			if dConf['lists']:
 
-				# If it's True
-				sList = '/%s' % (lists is True and '__list' or str(lists))
+				# If it's True, use __lists, else use the string sent
+				sList = '/%s' % (
+					dConf['lists'] is True
+						and '__list'
+						or str(dConf['lists'])
+				)
 
 				# Add the list read route
 				self.route(
@@ -773,3 +882,64 @@ class TimeoutHandler(WSGIHandler):
 		# Else, default to regular handle_error
 		else:
 			super().handle_error(t, v, tb)
+
+def clear_session_cookie():
+	"""Clear Session Cookie
+
+	Deletes the cookie for the session
+	"""
+
+	global _cookie
+
+	# If we don't have the cookie value
+	if _cookie is undefined:
+		_cookie = config.body.rest.cookie(False)
+
+	# If we have no cookie
+	if _cookie is False:
+		return
+
+	# Delete the cookie
+	bottle.response.set_cookie(
+		_cookie,
+		'',
+		max_age = 0,
+		path = '/',
+		secure = True,
+		samesite = 'Lax',
+		httponly = True
+	)
+
+def set_session_cookie(key, ttl):
+	"""Set Session Cookie
+
+	Sets the httpOnly cookie for the session
+
+	Arguments:
+		key (str): The session key
+		ttl (uint): The time to live for the cookie
+	"""
+
+	global _cookie
+
+	# If we don't have the cookie value
+	if _cookie is undefined:
+		_cookie = config.body.rest.cookie(False)
+
+	# If we have no cookie
+	if _cookie is False:
+		return
+
+	# If the ttl is 0
+	iTTL = ttl or SECONDS_365_DAYS
+
+	# Set the cookie in bottle
+	bottle.response.set_cookie(
+		_cookie,
+		key,
+		max_age = iTTL,
+		path = '/',
+		secure = True,
+		samesite = 'Lax',
+		httponly = True
+	)

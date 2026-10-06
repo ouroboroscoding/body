@@ -195,10 +195,7 @@ class Service(abc.ABC):
 		# Create the REST server using the Client instance
 		oRest = REST(
 			instances = [ self ],
-			cors = config.body.rest.allowed('localhost'),
-			on_errors = on_errors,
-			verbose = config.body.rest.verbose(False),
-			monitor = config.body.rest.monitor(None)
+			on_errors = on_errors
 		)
 
 		# If there's any additional
