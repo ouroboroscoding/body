@@ -1,5 +1,15 @@
 # body_oc releases
 
+## 2.2.3
+- Added ability to read sessions through a cookie value instead of just the
+`Authorization` header. Allows avoiding XSS attacks in browser based clients.
+- Verbose mode now prints out info about calling / returning requests from
+different services inside the same app. Previously only REST requests were
+printed.
+- Deprecated setting cors (allowed), lists, monitor, and versbose mode in REST,
+values now come from `config.body.rest` to standardise across all code that 
+uses them.
+
 ## 2.2.2
 - Switched from `gunicorn` to `gevent` to reduce memory use and more closely
 align with the principles of microservices.
