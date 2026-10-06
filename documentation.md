@@ -55,6 +55,7 @@ immediately after.
   "body": {
     "rest": {
       "allowed": [ "mydomain.com" ],
+      "cookie": "session",
       "default": {
         "domain": "localhost",
         "host": "0.0.0.0",
@@ -141,6 +142,7 @@ to use the **session** one.
   "body": {
     "rest": {
       "allowed": [ "mydomain.com" ],
+      "cookie": "session",
       "default": {
         "domain": "localhost",
         "host": "0.0.0.0",
@@ -170,6 +172,12 @@ To limit to a specific subdomain, change "allowed" to be more specific
 ```
 this way `https://admin.mydomain.com/` and `https://bob.admin.mydomain.com/`
 work, but not `https://mydomain.com/`.
+
+##### body.rest.cookie
+Represents the name of the cookie checked for a session key. Body can activate
+sessions via the Authorization header, but it can also check a cookie. Setting a
+name here will let it know which cookie to check, otherwise it will skip
+checking for cookie and go straight to `Authorization`.
 
 [ [top](#body_oc) / [contents](#contents) /
 [module configuration](#module-configuration) /
@@ -321,6 +329,8 @@ Seconds per hour, day, and week.
 SECONDS_HOUR = 3600
 SECONDS_DAY = 86400
 SECONDS_WEEK = 604800
+SECONDS_30_DAYS = 2592000
+SECONDS_365_DAYS = 31536000
 ```
 
 [ [top](#body_oc) / [contents](#contents) ]

@@ -16,12 +16,14 @@ __all__ = [
 ]
 
 # Ouroboros imports
-from config import config
+import config
 from jobject import jobject
 import jsonb
 
 # Python imports
 from copy import copy
+from datetime import datetime
+from http.cookies import SimpleCookie
 from time import sleep
 
 # Pip imports
@@ -31,6 +33,7 @@ from typing import TYPE_CHECKING, MutableMapping
 # Local imports
 from body import errors
 from body.response import Error, Response, ResponseException
+from body.rest import set_session_cookie
 if TYPE_CHECKING:
 	from body.service import Service
 
@@ -44,6 +47,12 @@ __action_to_request = {
 	'update': [ requests.put, 'PUT' ]
 }
 """Map actions to request methods"""
+
+# Get config info
+__conf = config.body.rest({
+	'cookie': False,
+	'verbose': False
+})
 
 def create(
 	service: str,
@@ -283,6 +292,16 @@ def request(
 	# If we got a service instance
 	if 'instance' in __services[service]:
 
+		# If we're in verbose mode
+		if __conf['verbose']:
+			print('%s REQUEST %s %s %s %s' % (
+				str(datetime.now()),
+				service,
+				action,
+				path,
+				(req and jsonb.encode(req, 2) or 'None')
+			))
+
 		# Try to find the method
 		try:
 			f = __services[service]['paths'][path][action]
@@ -298,7 +317,7 @@ def request(
 
 		# Try to call the method
 		try:
-			return f(jobject(req))
+			oResponse = f(jobject(req))
 
 		# If we got a KeyError
 		except (AttributeError, KeyError) as e:
@@ -311,7 +330,21 @@ def request(
 
 		# If we got a response exception, return the Response
 		except ResponseException as e:
-			return e.args[0]
+			oResponse = e.args[0]
+
+		# If we're in verbose mode
+		if __conf['verbose']:
+			print('%s RETURNING %s %s %s %s' % (
+				str(datetime.now()),
+				service,
+				action,
+				path,
+				jsonb.encode(oResponse.to_dict(), 2)
+			)
+		)
+
+		# Return the response
+		return oResponse
 
 	# Else, this is an external service
 	else:
@@ -328,8 +361,7 @@ def request(
 			# Increase the attempts
 			iAttempts += 1
 
-			# Make the request using the services URL and the current path, then
-			#	store the response
+			# Make the request using the services URL and the current path
 			try:
 				oRes = __action_to_request[action][0](
 					__services[service]['url'] + path,
@@ -356,6 +388,29 @@ def request(
 						errors.SERVICE_CONTENT_TYPE,
 						'%s' % oRes.headers['content-type']
 					)
+
+				# If we have a session cookie value
+				if __conf['cookie']:
+
+					# Check if it was created
+					if 'Set-Cookie' in oRes.headers:
+
+						# Convert the string to a cookies object
+						oCookies = SimpleCookie()
+						oCookies.load(oRes.headers['Set-Cookie'])
+
+						# If the session cookie exists
+						if __conf['cookie'] in oCookies:
+
+							# Fetch it
+							oCookie = oCookies[__conf['cookie']]
+
+							# Create the cookie ourselves
+							sMaxAge = oCookie['max-age']
+							set_session_cookie(
+								oCookie.value,
+								int(sMaxAge) if sMaxAge else 0
+							)
 
 				# Turn the content into a Response and return it
 				return Response.from_json(oRes.text)
