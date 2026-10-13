@@ -21,44 +21,32 @@ from jobject import jobject
 import jsonb
 
 # Python imports
-from copy import copy
-from datetime import datetime
 from http.cookies import SimpleCookie
 from time import sleep
 
 # Pip imports
 import requests
-from typing import TYPE_CHECKING, MutableMapping
+from typing import MutableMapping
 
 # Local imports
 from body import errors
-from body.response import Error, Response, ResponseException
+from body.info import service_info
+from body.response import Error, Response
 from body.rest import set_session_cookie
-if TYPE_CHECKING:
-	from body.service import Service
-
-__services = None
-"""Registered Services"""
+from body.service import _instances
 
 __action_to_request = {
-	'create': [ requests.post, 'POST' ],
-	'delete': [ requests.delete, 'DELETE' ],
-	'read': [ requests.get, 'GET' ],
-	'update': [ requests.put, 'PUT' ]
+	'create': requests.post,
+	'delete': requests.delete,
+	'read': requests.get,
+	'update': requests.put
 }
 """Map actions to request methods"""
 
-# Get config info
-__conf = config.body.rest({
-	'cookie': False,
-	'verbose': False
-})
+# Get cookie info
+__cookie = config.body.rest.cookie(False)
 
-def create(
-	service: str,
-	path: str,
-	req: dict = {}
-):
+def create(service: str, path: str, req: MutableMapping = {}) -> Response:
 	"""Create
 
 	Make a POST request
@@ -73,11 +61,7 @@ def create(
 	"""
 	return request(service, 'create', path, req)
 
-def delete(
-	service: str,
-	path: str,
-	req: dict = {}
-):
+def delete(service: str, path: str, req: MutableMapping = {}) -> Response:
 	"""Delete
 
 	Make a DELETE request
@@ -92,11 +76,7 @@ def delete(
 	"""
 	return request(service, 'delete', path, req)
 
-def read(
-	service: str,
-	path: str,
-	req: dict = {}
-):
+def read(service: str, path: str, req: MutableMapping = {}) -> Response:
 	"""Read
 
 	Make a GET request
@@ -111,142 +91,12 @@ def read(
 	"""
 	return request(service, 'read', path, req)
 
-def register_service(name: str, instance: Service):
-	"""Register Service
-
-	Marks a service as internal so that any create, read, update, delete request
-	will call the local instance instead of attempting an http request
-
-	Arguments:
-		name (str): The name of the service and how others will contact it
-		instance (Service): The created instance of the servce
-	"""
-
-	global __services
-
-	# If we haven't already, generate the list of services
-	if __services is None:
-		_generate_services()
-
-	# Add the instance and init the paths
-	__services[name]['instance'] = instance
-	__services[name]['paths'] = {}
-
-	# Go through all the request methods in the service
-	for dMethod in instance.requests:
-
-		# Generate the URL
-		sUri = dMethod['name'].replace('_', '/')
-
-		# Store the url and action
-		try:
-			__services[name]['paths'][sUri][dMethod['action']] = dMethod['func']
-		except KeyError:
-			__services[name]['paths'][sUri] = {
-				dMethod['action']: dMethod['func']
-			}
-
-	# Return the service
-	return __services[name]
-
-def _generate_services():
-	"""Generate Services
-
-	Fetches the service information from the config and generates the URLs for
-	all available services
-	"""
-
-	# Pull in the global services
-	global __services
-
-	# Fetch the REST config
-	dRest = config.body.rest({
-		'allowed': None,
-		'default': {
-			'domain': 'localhost',
-			'host': '0.0.0.0',
-			'port': 9000,
-			'protocol': 'http',
-			'workers': 1
-		}
-	})
-
-	# If we didn't get a list of services
-	if 'services' not in dRest:
-		raise ValueError('config.body.rest.services', 'missing')
-
-	# Init the defaults if none are found
-	if 'defaults' not in dRest:
-		dRest['defaults'] = {}
-
-	# Port values are not modified by default
-	iPortMod = 0
-
-	# If there is a port modifier
-	if 'port' in dRest['default']:
-
-		# Make sure it's an integer
-		try:
-			iPortMod = int(dRest['default']['port'])
-			del dRest['default']['port']
-		except ValueError:
-			raise ValueError('config.body.rest.default.port', 'must be an int')
-
-	# Reset the dict of services
-	__services = {}
-
-	# Loop through the list of services in the rest config
-	for s in dRest['services']:
-
-		# If the service doesn't point to a dict
-		if not isinstance(dRest['services'][s], dict):
-			raise ValueError(
-				'config.body.rest.services.%s' % s, 'must be a dict'
-			)
-
-		# Start with the default values
-		dParts = dRest['default'].copy()
-
-		# Then add the service values
-		dParts.update(dRest['services'][s])
-
-		# If we have no port
-		if 'port' not in dParts:
-
-			# But we have a modifier, assume we add to 80
-			if iPortMod: dParts['port'] = 80 + iPortMod
-
-		# Else add the modifier to the port passed
-		else:
-			dParts['port'] += iPortMod
-
-		# Set defaults for any missing parts
-		if not dParts['protocol']: dParts['protocol'] = 'http'
-		if not dParts['domain']: dParts['domain'] = 'localhost'
-		if 'path' not in dParts: dParts['path'] = ''
-		else: dParts['path'] = '%s/' % str(dParts['path'])
-
-		# Store the parts for the service
-		__services[s] = dParts.copy()
-
-		# Generate a URL from the parts and store it
-		__services[s]['url'] = '%s://%s%s/%s' % (
-			dParts['protocol'],
-			dParts['domain'],
-			'port' in dParts and ":%d" % dParts['port'] or '',
-			dParts['path']
-		)
-
-		# If we still have no port, default to 80
-		if 'port' not in __services[s]:
-			__services[s]['port'] = 80
-
 def request(
 	service: str,
 	action: str,
 	path: str,
 	req: MutableMapping = {}
-):
+) -> Response:
 	"""Request
 
 	Method to convert REST requests into HTTP requests
@@ -264,95 +114,41 @@ def request(
 		Response
 	"""
 
-	global __services
-
-	# If we haven't already, generate the list of services
-	if __services is None:
-		_generate_services()
-
-	# Init the data and headers
-	sData = ''
-	dHeaders = {}
-
-	# Add the default content length and type
-	dHeaders['Content-Length'] = '0'
-	dHeaders['Content-Type'] = 'application/json; charset=utf-8'
-
-	# If the data was passed
-	if 'data' in req and req['data']:
-
-		# Convert the data to JSON and store the length
-		sData = jsonb.encode(req['data'])
-		dHeaders['Content-Length'] = str(len(sData))
-
-	# If we have a session, add the ID to the headers
-	if 'session' in req and req['session']:
-		dHeaders['Authorization'] = req['session'].key()
-
 	# If we got a service instance
-	if 'instance' in __services[service]:
+	if service in _instances:
 
-		# If we're in verbose mode
-		if __conf['verbose']:
-			print('%s REQUEST %s %s %s %s' % (
-				str(datetime.now()),
-				service,
-				action,
-				path,
-				(req and jsonb.encode(req, 2) or 'None')
-			))
-
-		# Try to find the method
-		try:
-			f = __services[service]['paths'][path][action]
-
-		# If we got a KeyError
-		except KeyError as e:
-			if e.args[0] == path:
-				return Error(errors.SERVICE_NO_SUCH_NOUN)
-			elif e.args[0] == action:
-				return Error(errors.SERVICE_ACTION)
-			else:
-				raise e
-
-		# Try to call the method
-		try:
-			oResponse = f(jobject(req))
-
-		# If we got a KeyError
-		except (AttributeError, KeyError) as e:
-			if e.args[0] == 'data':
-				return Error(errors.SERVICE_NO_DATA)
-			elif e.args[0] == 'session':
-				return Error(errors.SERVICE_NO_SESSION)
-			else:
-				raise e
-
-		# If we got a response exception, return the Response
-		except ResponseException as e:
-			oResponse = e.args[0]
-
-		# If we're in verbose mode
-		if __conf['verbose']:
-			print('%s RETURNING %s %s %s %s' % (
-				str(datetime.now()),
-				service,
-				action,
-				path,
-				jsonb.encode(oResponse.to_dict(), 2)
-			)
-		)
-
-		# Return the response
-		return oResponse
+		# Call the service directly and return the instance
+		return _instances[service].request(path, action, jobject(req))
 
 	# Else, this is an external service
 	else:
 
+		# Get the service info
+		dInfo = service_info(service)
+
+		# Init the data and headers
+		sData = ''
+		dHeaders = { }
+
+		# Add the default content length and type
+		dHeaders['Content-Length'] = '0'
+		dHeaders['Content-Type'] = 'application/json; charset=utf-8'
+
+		# If the data was passed
+		if 'data' in req and req['data']:
+
+			# Convert the data to JSON and store the length
+			sData = jsonb.encode(req['data'])
+			dHeaders['Content-Length'] = str(len(sData))
+
+		# If we have a session, add the ID to the headers
+		if 'session' in req and req['session']:
+			dHeaders['Authorization'] = req['session'].key()
+
 		# If we received any meta vars
 		if 'meta' in req and req['meta']:
 			for k,v in req['meta'].items():
-				dHeaders['X-Body-%s' % k] = v
+				dHeaders[f'X-Body-{k}'] = v
 
 		# Loop requests so we don't fail just because of a network hiccup
 		iAttempts = 0
@@ -363,8 +159,8 @@ def request(
 
 			# Make the request using the services URL and the current path
 			try:
-				oRes = __action_to_request[action][0](
-					__services[service]['url'] + path,
+				oRes = __action_to_request[action](
+					dInfo['url'] + path,
 					data = sData,
 					headers = dHeaders
 				)
@@ -378,7 +174,7 @@ def request(
 					else:
 						return Error(
 							errors.SERVICE_STATUS,
-							'%d: %s' % (oRes.status_code, oRes.content)
+							f'{oRes.status_code}: {oRes.content}'
 						)
 
 				# If we got the wrong content type
@@ -386,11 +182,11 @@ def request(
 					'application/json; charset=utf-8':
 					return Error(
 						errors.SERVICE_CONTENT_TYPE,
-						'%s' % oRes.headers['content-type']
+						oRes.headers['content-type']
 					)
 
 				# If we have a session cookie value
-				if __conf['cookie']:
+				if __cookie:
 
 					# Check if it was created
 					if 'Set-Cookie' in oRes.headers:
@@ -400,10 +196,10 @@ def request(
 						oCookies.load(oRes.headers['Set-Cookie'])
 
 						# If the session cookie exists
-						if __conf['cookie'] in oCookies:
+						if __cookie in oCookies:
 
 							# Fetch it
-							oCookie = oCookies[__conf['cookie']]
+							oCookie = oCookies[__cookie]
 
 							# Create the cookie ourselves
 							sMaxAge = oCookie['max-age']
@@ -430,35 +226,7 @@ def request(
 				# We've tried enough, return an error
 				return Error(errors.SERVICE_UNREACHABLE, str(e))
 
-def service_info(name: str) -> dict:
-	"""Service Info
-
-	Returns the info related to a specific service
-
-	Arguments:
-		name (str): The name of the service
-
-	Raises:
-		KeyError if the name doesn't match a service
-
-	Returns:
-		dict
-	"""
-
-	global __services
-
-	# If we haven't already, generate the list of services
-	if __services is None:
-		_generate_services()
-
-	# Return a shallow copy of the info for the service
-	return copy(__services[name])
-
-def update(
-	service: str,
-	path: str,
-	req: dict = {}
-):
+def update(service: str, path: str, req: MutableMapping = {}) -> Response:
 	"""Update
 
 	Make a PUT request
