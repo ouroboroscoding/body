@@ -9,11 +9,10 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-15"
 
+__all__ = [ 'Service' ]
+
 # Ouroboros imports
-import jobject
-import jsonb
 from tools import evaluate
-import undefined
 
 # Python imports
 import abc
@@ -21,17 +20,18 @@ from collections.abc import Callable
 from datetime import datetime
 import re
 from typing import List
-import warnings
 
 # Module imports
 from body.errors import (
-	DATA_FIELDS, SERVICE_ACTION, SERVICE_NO_DATA, SERVICE_NO_SESSION,
-	SERVICE_NO_SUCH_NOUN
+	DATA_FIELDS, SERVICE_ACTION, SERVICE_NO_DATA, SERVICE_NO_META,
+	SERVICE_NO_SESSION, SERVICE_NO_SUCH_NOUN
 )
 from body.info import service_info
+from body.logging import close_logger, create_logger
+from body.request import Request, RequestException
 from body.response import Error, Response, ResponseException
 from body.rest import REST
-from body.types import ActionType
+from body.shared import ActionType, LogLevelMapper, LogLevelType
 
 _instances = { }
 """ Holds the instances of services that have been instantiated """
@@ -62,6 +62,13 @@ class Service(abc.ABC):
 	SomeService.additional_routes = [ ( '/custom', 'GET', custom ) ]
 	"""
 
+	__member_to_error = {
+		'data': SERVICE_NO_DATA,
+		'meta': SERVICE_NO_META,
+		'session': SERVICE_NO_SESSION
+	}
+	"""Maps missing request member calls to error codes"""
+
 	def __init__(self):
 		"""Constructor
 
@@ -78,17 +85,23 @@ class Service(abc.ABC):
 				f'service {self._service_name}'
 			)
 
+		# Create the logger
+		self._logger = create_logger(self._service_name)
+
+		# Logging
+		self.log('debug', 'initialising')
+
 		# Add the service
 		_instances[self._service_name] = self
 
 		# Init the list of available methods
 		self._requests = { }
 
-		# Go through all the functions found on the service
-		for sFunc in dir(self):
+		# Go through all the methods found on the service
+		for method in dir(self):
 
 			# Check the format of the method name
-			oMatch = self.__noun_regex.match(sFunc)
+			oMatch = self.__noun_regex.match(method)
 
 			# If it's a match
 			if oMatch:
@@ -98,10 +111,10 @@ class Service(abc.ABC):
 
 				# Store the url and action
 				try:
-					self._requests[sUri][oMatch.group(2)] = getattr(self, sFunc)
+					self._requests[sUri][oMatch.group(2)] = getattr(self, method)
 				except KeyError:
 					self._requests[sUri] = {
-						oMatch.group(2): getattr(self, sFunc)
+						oMatch.group(2): getattr(self, method)
 					}
 
 		# Call reset
@@ -159,7 +172,25 @@ class Service(abc.ABC):
 				[ [ f, 'missing' ] for f in e.args ]
 			))
 
-	def request(self, noun: str, action: ActionType, req: jobject) -> Response:
+	def log(self, level: LogLevelType, msg: str):
+		"""Log
+
+		Writes a message to the log or stdout
+
+		Arguments:
+			level (str): The level of the log message
+			msg (str): The message to write to the log
+		"""
+
+		# Add the timestamp and level
+		_msg = f'{datetime.now()} {level.upper()} {self._service_name} {msg}'
+
+		if self._logger:
+			self._logger.log(LogLevelMapper[level], _msg)
+		else:
+			print(_msg)
+
+	def request(self, noun: str, action: ActionType, req: Request) -> Response:
 		"""Request
 
 		Called with a noun / action in order to call the appropriate method
@@ -169,7 +200,7 @@ class Service(abc.ABC):
 		Arguments:
 			noun (str): The noun being called in the request
 			action (ActionType): The type of request being made
-			req (jobject): The associated request data
+			req (Request): The associated request data
 
 		Raises:
 			ResponseException
@@ -179,12 +210,10 @@ class Service(abc.ABC):
 		"""
 
 		# Logging
-		print('%s REQUEST %s %s %s %s' % (
-			str(datetime.now()),
+		self.log('info', 'REQUEST %s %s %s' % (
 			action,
-			self._service_name,
 			noun,
-			(req and jsonb.encode(req, 2) or 'None')
+			req.to_json(2)
 		))
 
 		# Init, no function
@@ -208,32 +237,25 @@ class Service(abc.ABC):
 
 			# Try to call the method
 			try:
-				oResponse = f(req)
+				response = f(req)
 
-			# If we got a KeyError
-			except (AttributeError, KeyError) as e:
-				if e.args[0] == 'data':
-					oResponse = Error(SERVICE_NO_DATA)
-				elif e.args[0] == 'session':
-					oResponse = Error(SERVICE_NO_SESSION)
-				else:
-					raise e
+			# If we got a request member error
+			except RequestException as e:
+				response = Error(self.__member_to_error[e.args[0]])
 
 			# If we got a response exception, return the Response
 			except ResponseException as e:
-				oResponse = e.args[0]
+				response = e.args[0]
 
 		# Logging
-		print('%s RESPONSE %s %s %s %s' % (
-			str(datetime.now()),
+		self.log('info', 'RESPONSE %s %s %s' % (
 			action,
-			self._service_name,
 			noun,
-			jsonb.encode(oResponse.to_dict(), 2)
+			response.to_json(2)
 		))
 
 		# Return the response
-		return oResponse
+		return response
 
 	@classmethod
 	def service_name(cls) -> str:
@@ -247,6 +269,20 @@ class Service(abc.ABC):
 		"""
 		return cls._service_name
 
+	def shutdown(self):
+		"""Shutdown
+
+		Should be called when the Service is no longer needed, either before
+		it is removed from memory, or before the interpreter closes completed
+		"""
+
+		# Logging
+		self.log('debug', 'shutting down')
+
+		# Shut down the logger
+		close_logger(self._service_name)
+		self._logger = None
+
 	@abc.abstractmethod
 	def reset(self):
 		"""Reset
@@ -259,48 +295,24 @@ class Service(abc.ABC):
 		"""
 		raise NotImplementedError('Must implement the "reset" method')
 
-	def rest(self,
-		additional: List[list] = undefined,
-		on_errors: Callable | None = None
-	):
+	@classmethod
+	def rest(cls, on_errors: Callable | None = None):
 		"""Rest
 
 		Creates a REST instance using the service as the only internally
-		accessible one
-
-		Additional URIs can be passed to the server to handle things outside of
-		the Service architecture.
-
-		def custom():
-			return "<html />"
-
-		rest(
-			additional = [ [ '/custom', 'GET', custom ] ]
-		)
+		accessible one.
 
 		Arguments:
-			additional (list): A list of tuples representing arguments to route.
 			on_errors (callable): An optional callback for when a service
 				request crashes
 		"""
 
-		# If deprecated additional argument sent
-		if additional is not undefined:
-			self.additional_routes = additional
-			warnings.warn(
-				( 'Setting additional on Service.rest is deprecated and will '
-				 'not work in the future. Instead set self.additional_routes '
-				 'in Service.__init__' ),
-				DeprecationWarning,
-				stacklevel = 2
-			)
-
 		# Get the service info
-		dInfo = service_info(self._service_name)
+		dInfo = service_info(cls._service_name)
 
 		# Create the REST server using the Client instance and run it
 		REST(
-			instances = [ self ],
+			services = [ cls ],
 			on_errors = on_errors
 		).run(
 			host = dInfo['host'],

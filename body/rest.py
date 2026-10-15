@@ -15,7 +15,7 @@ __created__		= "2023-03-17"
 __all__ = [ 'bottle', 'clear_session_cookie', 'REST', 'set_session_cookie' ]
 
 # Make sure we patched
-from gevent import monkey, Timeout as GTimeout
+from gevent import signal_handler, monkey, Timeout as GTimeout
 if not monkey.is_module_patched('socket'):
 	raise RuntimeError(
 		'gevent monkey patching was not applied before importing this '
@@ -25,7 +25,7 @@ if not monkey.is_module_patched('socket'):
 
 # Ouroboros imports
 import config
-from jobject import jobject
+import jobject
 import jsonb
 import memory
 from tools import clone
@@ -33,13 +33,12 @@ import undefined
 
 # Python imports
 from collections.abc import Callable
-from datetime import datetime
 import logging
 import re
+from signal import getsignal, SIGTERM
 import sys
 import traceback
-from typing import List, Literal, TYPE_CHECKING
-import warnings
+from typing import TYPE_CHECKING
 
 # Pip imports
 import bottle
@@ -53,9 +52,9 @@ from body.errors import \
 	REST_LIST_TO_LONG, REST_REQUEST_DATA, SERVICE_CRASHED, SERVICE_NO_DATA, \
 	SERVICE_NO_SESSION
 from body.response import Error, Response, ResponseException
+from body.shared import ActionType
 if TYPE_CHECKING:
 	from body.service import Service
-	from body.types import ActionType
 
 # Global vars
 _cookie = undefined
@@ -114,32 +113,32 @@ class _BaseRoute(object):
 		"""
 
 		# Check for auth
-		bCookie = False
-		mAuth = False
+		cookie = False
+		auth = False
 
 		# Do we have a session cookie name and was it sent?
 		if _cookie and bottle.request.cookies.get(_cookie, False):
-			bCookie = True
-			mAuth = bottle.request.cookies[_cookie]
+			cookie = True
+			auth = bottle.request.cookies[_cookie]
 
 		# Else, If the request sent a authorization token
 		elif 'Authorization' in bottle.request.headers:
-			mAuth = bottle.request.headers['Authorization']
+			auth = bottle.request.headers['Authorization']
 
 		# If we have an auth token
-		if mAuth:
+		if auth:
 
 			# Get the session from the Authorization token
-			req.session = memory.load(mAuth)
+			req.session = memory.load(auth)
 
 			# If the session is found
 			if req.session:
 
 				# If we have a cookie
-				if bCookie:
+				if cookie:
 
 					# Extend the cookie
-					set_session_cookie(mAuth, req.session.ttl())
+					set_session_cookie(auth, req.session.ttl())
 
 				# Extend the session itself
 				req.session.extend()
@@ -148,7 +147,7 @@ class _BaseRoute(object):
 			else:
 
 				# If we had a cookie, delete it
-				if bCookie:
+				if cookie:
 					clear_session_cookie()
 
 				# Return the response as 401
@@ -194,7 +193,7 @@ class _BaseRoute(object):
 				try:
 					req.meta[k[7:]] = bottle.request.headers[k]
 				except AttributeError:
-					req.meta = { k[7:]: bottle.request.headers[k] }
+					req.meta = jobject({ k[7:]: bottle.request.headers[k] })
 
 	def on_error(self, req: jobject):
 		"""On Error
@@ -206,28 +205,28 @@ class _BaseRoute(object):
 		"""
 
 		# Get the traceback info
-		sError = traceback.format_exc()
+		error = traceback.format_exc()
 
 		# Print the traceback to stderr
-		print(sError, file = sys.stderr)
+		self._service.log('error', error)
 
 		# If we have an error handler
 		if self.__on_error:
 
 			# Gather all the details, including optional ones
-			oDetails = {
+			details = {
 				'service': self._service,
 				'method': bottle.request.method,
 				'path': bottle.request.path,
 				'environment': bottle.request.environ,
-				'traceback': sError
+				'traceback': error
 			}
 			for s in [ 'data', 'session' ]:
 				if s in req:
-					oDetails[s] = req[s]
+					details[s] = req[s]
 
 			# Pass the details to the error handler
-			self.__on_error(oDetails)
+			self.__on_error(details)
 
 		# Return a response of service/request crashed
 		return Error(
@@ -320,11 +319,11 @@ class _ListRoute(_BaseRoute):
 		)
 
 		# Initialise the request details
-		oReq = jobject({ })
+		req = jobject({ })
 
 		# Convert the GET and store the data
 		try:
-			oReq.data = jsonb.decode(bottle.request.query['d'])
+			req.data = jsonb.decode(bottle.request.query['d'])
 		except Exception as e:
 			return Error(
 				REST_REQUEST_DATA,
@@ -332,24 +331,24 @@ class _ListRoute(_BaseRoute):
 			).to_json()
 
 		# Check for meta
-		self.meta(oReq)
+		self.meta(req)
 
 		# Check for auth
-		self.auth(oReq)
+		self.auth(req)
 
 		# In case the service crashes
 		try:
 
 			# If the data isn't passed or isn't an array
-			if 'data' not in oReq or not isinstance(oReq.data, list):
-				oResponse = Error(
+			if 'data' not in req or not isinstance(req.data, list):
+				response = Error(
 					REST_REQUEST_DATA,
 					'data must be an array'
 				)
 
 			# Else, if it's beyond the max
-			elif len(oReq.data) > 10:
-				oResponse = Error(
+			elif len(req.data) > 10:
+				response = Error(
 					REST_LIST_TO_LONG,
 					f'Can not request more than 10 urls via {self._uri}'
 				)
@@ -357,11 +356,17 @@ class _ListRoute(_BaseRoute):
 			# Else, we have an array of nouns to call and return
 			else:
 
-				# Init the response
-				lResponse = [ ]
+				# Logging
+				self._service.log(
+					'debug',
+					f'REQUEST {self._uri} {jsonb.encode(req.to_dict(), 2)}'
+				)
+
+				# Init the responses
+				responses = [ ]
 
 				# Go through each element in the list
-				for m in oReq.data:
+				for m in req.data:
 
 					# If we got a string
 					if isinstance(m, str):
@@ -369,7 +374,7 @@ class _ListRoute(_BaseRoute):
 
 					# Else, if we didn't get a list
 					elif not isinstance(m, list):
-						oResponse = Error(
+						response = Error(
 							REST_REQUEST_DATA, [ m, (
 								'data must be an array or URI and data, '
 								'or single string for the URI'
@@ -379,49 +384,49 @@ class _ListRoute(_BaseRoute):
 
 					# If the URI doesn't exist
 					if m[0] not in self.__uris:
-						oResponse = Error(REST_LIST_INVALID_URI, m[0])
+						response = Error(REST_LIST_INVALID_URI, m[0])
 						break
 
 					# Clone the __list request data so that the session
 					#	or any other data is shared
-					oRequest = clone(oReq)
+					request = clone(req)
 
 					# If unique data was passed for the child request
 					if len(m) == 2:
 
 						# If we didn't get a dict
 						if not isinstance(m[1], dict):
-							oResponse = Error(
+							response = Error(
 								REST_LIST_INVALID_URI,
 								[ m[1], 'data must be an object' ]
 							)
 							break
 
 						# Set the data for this request
-						oRequest.data = m[1]
+						request.data = m[1]
 
 					# No unique data was sent, so we need to delete the
 					#	original data from the request
 					else:
-						try: del oRequest.data
+						try: del request.data
 						except AttributeError: pass
 
 					# Call the request and append the data to the
 					#	response
 					try:
-						lResponse.append([
+						responses.append([
 							m[0],
 							self._service.request(
 								m[0],
 								'read',
-								oRequest
+								request
 							).to_dict()
 						])
 
 					# If we got a KeyError
 					except (AttributeError, KeyError) as e:
 						if e.args[0] in self.__key_to_errors:
-							oResponse = Error(
+							response = Error(
 								self.__key_to_errors[e.args[0]]
 							)
 							break
@@ -432,7 +437,7 @@ class _ListRoute(_BaseRoute):
 					except ResponseException as e:
 
 						# Set the response using the exceptions first argument
-						oResponse = e.args[0]
+						response = e.args[0]
 						break
 
 				# Else, we got through the list
@@ -440,13 +445,13 @@ class _ListRoute(_BaseRoute):
 
 					# Set the response using the list of individual
 					#	responses
-					oResponse = Response(lResponse)
+					response = Response(responses)
 
 		# If we get absolutely any exception
 		except Exception as e:
 
 			# Set the response
-			oResponse = self.on_error(oReq)
+			response = self.on_error(req)
 
 			# Add the service and path to the call
 			l = [
@@ -455,17 +460,23 @@ class _ListRoute(_BaseRoute):
 				bottle.request.path
 			]
 			try:
-				oResponse.error['service'].append(l)
+				response.error['service'].append(l)
 			except KeyError:
-				oResponse.error['service'] = [ l ]
+				response.error['service'] = [ l ]
 
 		# Check for response error
-		self.response_error(oResponse)
+		self.response_error(response)
+
+		# Logging
+		self._service.log(
+			'debug',
+			f'RESPONSE {self._uri} {jsonb.encode(response.to_dict(), 2)}'
+		)
 
 		# Return the Response as a string
-		return oResponse.to_json()
+		return response.to_json()
 
-class _OptionsRoute(_BaseRoute):
+class _Optionroute(_BaseRoute):
 	"""Options Route
 
 	Handles OPTIONS requests
@@ -484,11 +495,7 @@ class _OptionsRoute(_BaseRoute):
 		"""
 
 		# Logging
-		print('%s CORS %s %s' % (
-			str(datetime.now()),
-			self._service.service_name(),
-			self._uri
-		))
+		self._service.log('debug', f'CORS {self._uri}')
 
 		# Call shared cors
 		self.cors()
@@ -564,7 +571,7 @@ class _RequestRoute(_BaseRoute):
 		"""
 
 		# Cors
-		if self.cors(): return ''
+		self.cors()
 
 		# Set the return to JSON
 		bottle.response.headers['Content-Type'] = (
@@ -572,98 +579,115 @@ class _RequestRoute(_BaseRoute):
 		)
 
 		# Initialise the request details
-		oReq = jobject({ })
+		req = jobject({ })
 
-		# If we got a Read request and the data is in the GET
-		if bottle.request.method == 'GET' and 'd' in bottle.request.query:
-
-			# Convert the GET and store the data
-			try:
-				oReq.data = jsonb.decode(bottle.request.query['d'])
-			except Exception as e:
-				return Error(
-					REST_REQUEST_DATA,
-					'%s\n%s' % ( bottle.request.query['d'], str(e) )
-				).to_json()
-
-		# Else we most likely got the data in the body
-		else:
-
-			# Make sure the request send JSON
-			try:
-				if not self.__content_type.match(
-					bottle.request.headers['Content-Type'].lower()
-				):
-					return str(Error(REST_CONTENT_TYPE))
-			except KeyError:
-				return Error(REST_CONTENT_TYPE).to_json()
-
-			# Store the data, if it's too big we need to read it rather than
-			#	use getvalue
-			try:
-				sData = bottle.request.body.getvalue()
-			except AttributeError as e:
-				sData = bottle.request.body.read()
-
-			# Make sure we have a string, not a set of bytes
-			try:
-				sData = sData.decode()
-			except (UnicodeDecodeError, AttributeError):
-				pass
-
-			# Convert the data and store it
-			try:
-				if sData: oReq.data = jsonb.decode(sData)
-			except Exception as e:
-				return Error(
-					REST_REQUEST_DATA,
-					'%s\n%s' % ( sData, str(e) )
-				).to_json()
-
-		# Check for meta
-		self.meta(oReq)
-
-		# Check for auth
-		self.auth(oReq)
-
-		# In case the service crashes
+		# Check for rest exceptions
 		try:
 
-			# Call the appropriate API method based on the HTTP/request
-			#	method
+			# If we got a Read request and the data is in the GET
+			if bottle.request.method == 'GET' and 'd' in bottle.request.query:
+
+				# Convert the GET and store the data
+				try:
+					req.data = jsonb.decode(bottle.request.query['d'])
+				except Exception as e:
+					raise RestException(Error(
+						REST_REQUEST_DATA,
+						'%s\n%s' % ( bottle.request.query['d'], str(e) )
+					))
+
+			# Else we most likely got the data in the body
+			else:
+
+				# Make sure the request sent JSON
+				try:
+					if not self.__content_type.match(
+						bottle.request.headers['Content-Type'].lower()
+					):
+						raise RestException(Error(REST_CONTENT_TYPE))
+				except KeyError:
+					raise RestException(Error(REST_CONTENT_TYPE))
+
+				# Store the data, if it's too big we need to read it rather than
+				#	use getvalue
+				try:
+					data = bottle.request.body.getvalue()
+				except AttributeError as e:
+					data = bottle.request.body.read()
+
+				# Make sure we have a string, not a set of bytes
+				try:
+					data = data.decode()
+				except (UnicodeDecodeError, AttributeError):
+					pass
+
+				# Convert the data and store it
+				try:
+					if data: req.data = jsonb.decode(data)
+				except Exception as e:
+					raise RestException(Error(
+						REST_REQUEST_DATA,
+						'%s\n%s' % ( data, str(e) )
+					))
+
+			# Check for meta
+			self.meta(req)
+
+			# Check for auth
+			self.auth(req)
+
+			# In case the service crashes
 			try:
-				oResponse = self._service.request(
-					self._uri,
-					self.__method_to_action[bottle.request.method],
-					oReq
-				)
 
-			# If we got a KeyError
-			except (AttributeError, KeyError) as e:
-				if e.args[0] in self.__key_to_errors:
-					oResponse = Error(
-						self.__key_to_errors[e.args[0]]
+				# Call the appropriate API method based on the HTTP/request
+				#	method
+				try:
+					response = self._service.request(
+						self._uri,
+						self.__method_to_action[bottle.request.method],
+						req
 					)
-				else:
-					raise
 
-			# If we got a response exception
-			except ResponseException as e:
+				# If we got a response exception
+				except ResponseException as e:
 
-				# Set the response using the exceptions first argument
-				oResponse = e.args[0]
+					# Set the response using the exceptions first argument
+					response = e.args[0]
 
-		# If we get absolutely any exception
-		except Exception as e:
+			# If we get absolutely any exception
+			except Exception as e:
 
-			# Set the response
-			oResponse = self.on_error(oReq)
+				# Set the response
+				response = self.on_error(req)
 
-		# Check for response error
-		self.response_error(oResponse)
+			# Check for response error
+			self.response_error(response)
 
-		# Return the Response as a string
-		return oResponse.to_json()
+			# Return the Response as a string
+			return response.to_json()
+
+		# Handle Rest issues
+		except RestException as e:
+
+			# Log the error
+			self._service.log('error', 'RESPONSE %s %s %s' % (
+				self._action,
+				self._uri,
+				jsonb.encode(e.args[0].to_dict(), 2)
+			))
+
+			# Return the response
+			return e.args[0].to_json()
+
+class RestException(Exception):
+	"""Rest Exception
+
+	Used to handle failures during the request
+
+	Extends:
+		Exception
+	"""
+	pass
 
 class REST(bottle.Bottle):
 	"""REST
@@ -674,38 +698,29 @@ class REST(bottle.Bottle):
 		Bottle
 	"""
 
+	__instantiated = False
+	""" Prevents duplicates """
+
 	__action_to_method = {
 		'create': 'POST',
 		'delete': 'DELETE',
 		'read': 'GET',
 		'update': 'PUT'
 	}
-	"""Maps service actions to HTTP methods"""
+	""" Maps service actions to HTTP methods """
 
 	def __init__(self,
-		instances: List[Service],
-		cors: List[str] = undefined,
-		lists: str | Literal[True] = undefined,
-		on_errors: Callable | None = None,
-		verbose: bool = undefined,
-		monitor: list = undefined
+		services: list[type[Service]],
+		on_errors: Callable | None = None
 	):
 		"""Constructor
 
 		Creates a new REST instance
 
 		Arguments:
-			instances (dict): The service names to instances to make accessible
-				via REST
-			cors (str[]): A list of allowed domains for CORS policy
-			lists (str | True): True to add `__list` to each service, else a str
-				to use instead of `__list`
+			services (dict): The service classes to instantiate and use
 			on_errors (callable): Optional, a function to call when a service
 				request throws an exception
-			verbose (bool): Optional, set to True to print out each request and
-				and response
-			monitor (list): If set, must be two strings for user and password
-				which are used to validate the request
 
 		Raises:
 			ValueError
@@ -716,47 +731,22 @@ class REST(bottle.Bottle):
 
 		global _cookie
 
+		# If we're already instantiated
+		if self.__instantiated:
+			raise RuntimeError('REST can only be instantiated once')
+		self.__instantiated = True
+
 		# Call the parent constructor first so the object is setup
 		super(REST, self).__init__()
 
-		# If the instances are not a list
-		if not isinstance(instances, list):
+		# If the services are not a list
+		if not isinstance(services, list):
 			raise TypeError(
-				'instances', 'must be a list', sys._getframe().f_code.co_name
-			)
-
-		# If deprecated arguments sent
-		if cors is not undefined:
-			warnings.warn(
-				( 'Setting cors on REST.__init__ is deprecated, set '
-				'config.body.rest.allowed instead' ),
-				DeprecationWarning,
-				stacklevel = 2
-			)
-		if lists is not undefined:
-			warnings.warn(
-				( 'Setting lists on REST.__init__ is deprecated, set '
-				'config.body.rest.lists instead' ),
-				DeprecationWarning,
-				stacklevel = 2
-			)
-		if verbose is not undefined:
-			warnings.warn(
-				( 'Setting verbose on REST.__init__ is deprecated, set '
-				'config.body.rest.verbose instead' ),
-				DeprecationWarning,
-				stacklevel = 2
-			)
-		if monitor is not undefined:
-			warnings.warn(
-				( 'Setting monitor on REST.__init__ is deprecated, set '
-				'config.body.rest.monitor instead' ),
-				DeprecationWarning,
-				stacklevel = 2
+				'services must be a list', sys._getframe().f_code.co_name
 			)
 
 		# Get necessary config values
-		dConf = config.body.rest({
+		conf = config.body.rest({
 			'allowed': [ 'localhost' ],
 			'cookie': False,
 			'lists': True,
@@ -765,27 +755,27 @@ class REST(bottle.Bottle):
 		})
 
 		# If cors
-		if dConf['allowed']:
+		if conf['allowed']:
 
 			# If it's not a list
-			if( isinstance(dConf['allowed'], str) or
-				not isinstance(dConf['allowed'], list) ):
+			if( isinstance(conf['allowed'], str) or
+				not isinstance(conf['allowed'], list) ):
 				raise RuntimeError('config.body.rest.allowed must be a list')
 
 			# If we only have one
-			if len(dConf['allowed']) == 1:
-				sAllowed = dConf['allowed'][0].replace('.', '\\.')
+			if len(conf['allowed']) == 1:
+				allowed = conf['allowed'][0].replace('.', '\\.')
 
 			# Else, conver the list into a grouping of possible values
 			else:
-				sAllowed = '(?:%s)' % '|'.join([
+				allowed = '(?:%s)' % '|'.join([
 					s.replace('.', '\\.')
-					for s in dConf['allowed']
+					for s in conf['allowed']
 				])
 
 			# Generate the full regex
-			sRegex = f'https?://(.*\\.)?{sAllowed}'
-			if dConf['verbose']:
+			sRegex = f'https?://(.*\\.)?{allowed}'
+			if conf['verbose']:
 				print(f'REST CORS: {sRegex}')
 
 			# Compile the regex and set it
@@ -796,136 +786,151 @@ class REST(bottle.Bottle):
 			_BaseRoute.set_on_error(on_errors)
 
 		# If we have a cookie name, set the global var
-		_cookie = dConf['cookie']
-		if _cookie and dConf['verbose']:
+		_cookie = conf['cookie']
+		if _cookie and conf['verbose']:
 			print(f'REST session cookie: {_cookie}')
 
 		# Add the monitor path if needed
-		if dConf['monitor'] is not None:
+		if conf['monitor'] is not None:
 
 			# Create the check method
-			check = ( lambda u, p: u == dConf['monitor'][0] and
-									p == dConf['monitor'][1] )
+			check = ( lambda u, p: u == conf['monitor'][0] and
+									p == conf['monitor'][1] )
 
 			# Route
-			sRoute = (
-				(len(dConf['monitor']) < 3 or dConf['monitor'][2] is True)
+			route = (
+				(len(conf['monitor']) < 3 or conf['monitor'][2] is True)
 					and '/__monitor'
-					or f'/{dConf['monitor'][2]}'
+					or f'/{conf['monitor'][2]}'
 			)
-			if dConf['verbose']:
-				print(f'REST {sRoute} route added')
+			if conf['verbose']:
+				print(f'REST {route} route added')
 
 			# Add the route
 			self.route(
-				sRoute,
+				route,
 				[ 'GET', 'OPTIONS' ],
 				bottle.auth_basic(check)(self.monitor)
 			)
 
+		# Init the service instances
+		self._instances: list[type[Service]] = [ ]
+
 		# Step through each service
-		bOne = len(instances) == 1
-		for oInstance in instances:
+		one_service = len(services) == 1
+		for service in services:
+
+			# Create the instances
+			service_instance = service()
 
 			# Go through all the request methods found in the service
-			for sUri,dActions in oInstance._requests.items():
+			for uri,actions in service_instance._requests.items():
 
 				# Generate the route
-				sRoute = (
-					bOne
-						and f'/{sUri}'
-						or f'/{oInstance.service_name()}/{sUri}'
+				route = (
+					one_service
+						and f'/{uri}'
+						or f'/{service_instance.service_name()}/{uri}'
 				)
 
 				# There's at least one, so add the OPTIONS route
 				self.route(
-					sRoute, 'OPTIONS', _OptionsRoute(oInstance, sUri)
+					route, 'OPTIONS', _Optionroute(service_instance, uri)
 				)
 
 				# Logging
 				print(
 					f'REST Route: OPTIONS '
-					f'{oInstance.service_name()}/{sUri}'
+					f'{service_instance.service_name()}/{uri}'
 				)
 
 				# Go through the actions
-				for sAction in dActions:
+				for action in actions:
 
 					# Get the method
-					sMethod = self.__action_to_method[sAction]
+					method = self.__action_to_method[action]
 
 					# Register it with bottle
 					self.route(
-						sRoute, sMethod, _RequestRoute(oInstance, sUri, sAction)
+						route,
+						method,
+						_RequestRoute(service_instance, uri, action)
 					)
 
 					# Logging
 					print(
-						f'REST Route: {sMethod} '
-						f'{oInstance.service_name()}/{sUri}'
+						f'REST Route: {method} '
+						f'{service_instance.service_name()}/{uri}'
 					)
 
 			# If we have additional static routes
-			if oInstance.additional_routes is not None:
+			if service_instance.additional_routes is not None:
 
 				# Go through each one
-				for l in oInstance.additional_routes:
+				for l in service_instance.additional_routes:
 
 					# Generate the route
-					sRoute = (
-						bOne
+					route = (
+						one_service
 						and l[0]
-						or f'/{oInstance.service_name()}{l[0]}'
+						or f'/{service_instance.service_name()}{l[0]}'
 					)
 
 					# Add the OPTIONS
-					self.route(sRoute, 'OPTIONS', _OptionsRoute(oInstance, sUri))
+					self.route(
+						route,
+						'OPTIONS',
+						_Optionroute(service_instance, uri)
+					)
 
 					# Logging
 					print(
 						f'REST Route: OPTIONS '
-						f'{oInstance.service_name()}/{sUri}'
+						f'{service_instance.service_name()}/{uri}'
 					)
 
 					# Generate the route
-					self.route(sRoute, l[1], l[2])
+					self.route(route, l[1], l[2])
 
 					# Logging
 					print(
 						f'REST Route: {l[1]} '
-						f'/{oInstance.service_name()}{l[0]}'
+						f'/{service_instance.service_name()}{l[0]}'
 					)
 
 			# If we have a request for a list of requests
-			if dConf['lists']:
+			if conf['lists']:
 
 				# If it's True, use __lists, else use the string sent
 				sList = (
-					dConf['lists'] is True
+					conf['lists'] is True
 						and '__list'
-						or str(dConf['lists'])
+						or str(conf['lists'])
 				)
 
 				# Generate the route
-				sRoute = (
-					bOne
+				route = (
+					one_service
 					and sList
-					or ('/%s/%s' % ( oInstance.service_name(), sList))
+					or ('/%s/%s' % ( service_instance.service_name(), sList))
 				)
 
 				# Add the list read route
 				self.route(
-					sRoute,
+					route,
 					[ 'GET', 'OPTIONS' ],
-					_ListRoute(oInstance, sList)
+					_ListRoute(service_instance, sList)
 				)
 
 				# Logging
-				if dConf['verbose']:
+				if conf['verbose']:
 					print(
 						'REST Route: GET '
-						f'/{oInstance.service_name()}/{sList}'
+						f'/{service_instance.service_name()}/{sList}'
 					)
+
+		# Add the instance to the list
+		self._instances.append(service_instance)
 
 	# monitor method
 	def monitor(self) -> str:
@@ -938,12 +943,12 @@ class REST(bottle.Bottle):
 		"""
 
 		# Get used pool
-		iUsed = self._pool.size - self._pool.free_count()
+		i = self._pool.size - self._pool.free_count()
 
 		# If we have a pool
 		sPool = (
 			self._pool
-			and f'{iUsed} / {self._pool.size}'
+			and f'{i} / {self._pool.size}'
 			or 'No pool'
 		)
 
@@ -988,7 +993,7 @@ class REST(bottle.Bottle):
 		TimeoutHandler.timeout_seconds = timeout
 
 		# Create the WSGI server with the given host/port/pool
-		oServer = WSGIServer(
+		server = WSGIServer(
 			(host, port),
 			self,
 			spawn = self._pool,
@@ -1004,11 +1009,25 @@ class REST(bottle.Bottle):
 				f'(concurrency limited to {workers})'
 			)
 
+		# Check for an existing signal handler
+		prev_handler = getsignal(SIGTERM)
+
+		# Catch sigterm and kill the server so we can exit gracefully
+		def _sigterm_handler(signum, frame):
+			server.stop()
+			if callable(prev_handler):
+				prev_handler(signum, frame)
+		signal_handler(SIGTERM, _sigterm_handler)
+
 		# Run the webserver
 		try:
-			oServer.serve_forever()
+			server.serve_forever()
 		except KeyboardInterrupt:
-			oServer.stop()
+			server.stop()
+
+		# Shutdown the instances
+		for o in self._instances:
+			o.shutdown()
 
 class TimeoutHandler(WSGIHandler):
 	"""Timeout Handler

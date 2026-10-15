@@ -1,7 +1,7 @@
 # coding=utf8
 """ Response
 
-Holds the class that holds Response messages sent back from Service Rerquests
+Holds the class that holds Response messages sent back from Service requests
 """
 
 __author__		= "Chris Nasr"
@@ -112,17 +112,12 @@ class Response(object):
 		Returns:
 			str
 		"""
-		return str(self.to_dict())
-
-	def __str__(self):
-		"""str
-
-		Python magic method to return a string from the instance
-
-		Returns:
-			str
-		"""
-		return str(self.to_dict())
+		fields = ', '.join(
+			f'{k}={self.__dict__[k]!r}'
+			for k in ( 'data', 'error', 'warning' )
+			if k in self.__dict__
+		)
+		return f'{self.__class__.__name__}({fields})'
 
 	@classmethod
 	def from_dict(cls, val):
@@ -190,32 +185,35 @@ class Response(object):
 		"""
 
 		# Init the return
-		dRet = {}
+		ret = { }
 
 		# Set the data key if it's set in the instance
 		if self.data is not None:
-			dRet['data'] = self.data
+			ret['data'] = self.data
 
 		# If the error is not set to False
 		if self.error is not False:
-			dRet['error'] = self.error
+			ret['error'] = self.error
 
 		# Look for a warning attribute (less likely, use if/hasattr)
 		if hasattr(self, 'warning'):
-			dRet['warning'] = self.warning
+			ret['warning'] = self.warning
 
 		# Return the dict
-		return dRet
+		return ret
 
-	def to_json(self):
+	def to_json(self, indent: int | str | None = None):
 		"""To JSON
 
 		Returns a JSON representation of the object
 
+		Arguments:
+			indent (str | int | None): The indentation
+
 		Returns:
 			str
 		"""
-		return jsonb.encode(self.to_dict())
+		return jsonb.encode(self.to_dict(), indent)
 
 	def warning_exists(self):
 		"""Warning Exists

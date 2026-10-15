@@ -30,7 +30,7 @@ def _generate_info():
 	global __info
 
 	# Fetch the REST config
-	dRest = config.body.rest({
+	conf = config.body.rest({
 		'allowed': None,
 		'default': {
 			'domain': 'localhost',
@@ -42,23 +42,23 @@ def _generate_info():
 	})
 
 	# If we didn't get a list of services
-	if 'services' not in dRest:
-		raise ValueError('config.body.rest.services', 'missing')
+	if 'services' not in conf:
+		raise ValueError('config.body.rest.services is missing')
 
 	# Init the defaults if none are found
-	if 'defaults' not in dRest:
-		dRest['defaults'] = {}
+	if 'defaults' not in conf:
+		conf['defaults'] = { }
 
 	# Port values are not modified by default
-	iPortMod = 0
+	port_mod = 0
 
 	# If there is a port modifier
-	if 'port' in dRest['default']:
+	if 'port' in conf['default']:
 
 		# Make sure it's an integer
 		try:
-			iPortMod = int(dRest['default']['port'])
-			del dRest['default']['port']
+			port_mod = int(conf['default']['port'])
+			del conf['default']['port']
 		except ValueError:
 			raise ValueError('config.body.rest.default.port', 'must be an int')
 
@@ -66,45 +66,45 @@ def _generate_info():
 	__info = { }
 
 	# Loop through the list of services in the rest config
-	for s in dRest['services']:
+	for s in conf['services']:
 
 		# If the service doesn't point to a dict
-		if not isinstance(dRest['services'][s], dict):
+		if not isinstance(conf['services'][s], dict):
 			raise ValueError(
 				'config.body.rest.services.%s' % s, 'must be a dict'
 			)
 
 		# Start with the default values
-		dParts = dRest['default'].copy()
+		parts = conf['default'].copy()
 
 		# Then add the service values
-		dParts.update(dRest['services'][s])
+		parts.update(conf['services'][s])
 
 		# If we have no port
-		if 'port' not in dParts:
+		if 'port' not in parts:
 
 			# But we have a modifier, assume we add to 80
-			if iPortMod: dParts['port'] = 80 + iPortMod
+			if port_mod: parts['port'] = 80 + port_mod
 
 		# Else add the modifier to the port passed
 		else:
-			dParts['port'] += iPortMod
+			parts['port'] += port_mod
 
 		# Set defaults for any missing parts
-		if not dParts['protocol']: dParts['protocol'] = 'http'
-		if not dParts['domain']: dParts['domain'] = 'localhost'
-		if 'path' not in dParts: dParts['path'] = ''
-		else: dParts['path'] = '%s/' % str(dParts['path'])
+		if not parts['protocol']: parts['protocol'] = 'http'
+		if not parts['domain']: parts['domain'] = 'localhost'
+		if 'path' not in parts: parts['path'] = ''
+		else: parts['path'] = '%s/' % str(parts['path'])
 
 		# Store the parts for the service
-		__info[s] = dParts.copy()
+		__info[s] = parts.copy()
 
 		# Generate a URL from the parts and store it
 		__info[s]['url'] = '%s://%s%s/%s' % (
-			dParts['protocol'],
-			dParts['domain'],
-			'port' in dParts and ":%d" % dParts['port'] or '',
-			dParts['path']
+			parts['protocol'],
+			parts['domain'],
+			'port' in parts and ":%d" % parts['port'] or '',
+			parts['path']
 		)
 
 		# If we still have no port, default to 80
