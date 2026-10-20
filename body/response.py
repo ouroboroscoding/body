@@ -257,6 +257,9 @@ class ResponseException(Exception):
 	"""Response Exception
 
 	Python won't let you raise anything that doesn't extend BaseException
+
+	Extends:
+		Exception
 	"""
 
 	def __init__(self,
@@ -280,8 +283,12 @@ class ResponseException(Exception):
 
 		# If we got a Response object
 		if isinstance(data, Response):
-			super().__init__(data)
+			super(ResponseException, self).__init__(
+				data
+			)
 
 		# Else, construct the Response and pass it to the parent
 		else:
-			super().__init__(Response(data, error, warning))
+			super(ResponseException, self).__init__(
+				Response(data, error, warning)
+			)

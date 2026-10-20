@@ -13,11 +13,11 @@ __all__ = [ 'Service' ]
 
 # Ouroboros imports
 from tools import evaluate
+import undefined
 
 # Python imports
 import abc
 from collections.abc import Callable
-from datetime import datetime
 import re
 from typing import List
 
@@ -27,11 +27,11 @@ from body.errors import (
 	SERVICE_NO_SESSION, SERVICE_NO_SUCH_NOUN
 )
 from body.info import service_info
-from body.logging import close_logger, create_logger
+from body.logging import close_logger, create_logger, log, LogLevel
 from body.request import Request, RequestException
 from body.response import Error, Response, ResponseException
 from body.rest import REST
-from body.shared import ActionType, LogLevelMapper, LogLevelType
+from body.shared import ActionType
 
 _instances = { }
 """ Holds the instances of services that have been instantiated """
@@ -86,10 +86,10 @@ class Service(abc.ABC):
 			)
 
 		# Create the logger
-		self._logger = create_logger(self._service_name)
+		create_logger(self._service_name)
 
 		# Logging
-		self.log('debug', 'initialising')
+		self.log(LogLevel.DEBUG, 'initialising')
 
 		# Add the service
 		_instances[self._service_name] = self
@@ -172,23 +172,20 @@ class Service(abc.ABC):
 				[ [ f, 'missing' ] for f in e.args ]
 			))
 
-	def log(self, level: LogLevelType, msg: str):
+	def log(self, level: LogLevel, msg: str, data: any = undefined):
 		"""Log
 
-		Writes a message to the log or stdout
+		Writes a message to the log or stdout. If data is passed, it will be
+		converted to easily human readable output if sent to stdout, otherwise
+		be printed on one line to keep log files easily parsable.
 
 		Arguments:
-			level (str): The level of the log message
+			level (LogLevel): The level of the log message
 			msg (str): The message to write to the log
+			data (any): Data that will be converted to JSON and appended to the
+				message
 		"""
-
-		# Add the timestamp and level
-		_msg = f'{datetime.now()} {level.upper()} {self._service_name} {msg}'
-
-		if self._logger:
-			self._logger.log(LogLevelMapper[level], _msg)
-		else:
-			print(_msg)
+		log(self._service_name, level, msg, data)
 
 	def request(self, noun: str, action: ActionType, req: Request) -> Response:
 		"""Request
@@ -210,11 +207,7 @@ class Service(abc.ABC):
 		"""
 
 		# Logging
-		self.log('info', 'REQUEST %s %s %s' % (
-			action,
-			noun,
-			req.to_json(2)
-		))
+		self.log(LogLevel.INFO, f'REQUEST {action} {noun}', req.loggable())
 
 		# Init, no function
 		f = None
@@ -226,9 +219,9 @@ class Service(abc.ABC):
 		# If we got a KeyError
 		except KeyError as e:
 			if e.args[0] == noun:
-				oResponse = Error(SERVICE_NO_SUCH_NOUN)
+				response = Error(SERVICE_NO_SUCH_NOUN)
 			elif e.args[0] == action:
-				oResponse = Error(SERVICE_ACTION)
+				response = Error(SERVICE_ACTION)
 			else:
 				raise e
 
@@ -248,14 +241,22 @@ class Service(abc.ABC):
 				response = e.args[0]
 
 		# Logging
-		self.log('info', 'RESPONSE %s %s %s' % (
-			action,
-			noun,
-			response.to_json(2)
-		))
+		self.log(LogLevel.INFO, f'RESPONSE {action} {noun}', response.to_dict())
 
 		# Return the response
 		return response
+
+	@abc.abstractmethod
+	def reset(self):
+		"""Reset
+
+		Called when the system has been reset, usually by loading new data that
+		the instance will need to process/reprocess
+
+		Returns:
+			None
+		"""
+		raise NotImplementedError('Must implement the "reset" method')
 
 	@classmethod
 	def service_name(cls) -> str:
@@ -277,23 +278,11 @@ class Service(abc.ABC):
 		"""
 
 		# Logging
-		self.log('debug', 'shutting down')
+		self.log(LogLevel.DEBUG, 'shutting down')
 
 		# Shut down the logger
 		close_logger(self._service_name)
 		self._logger = None
-
-	@abc.abstractmethod
-	def reset(self):
-		"""Reset
-
-		Called when the system has been reset, usually by loading new data that
-		the instance will need to process/reprocess
-
-		Returns:
-			None
-		"""
-		raise NotImplementedError('Must implement the "reset" method')
 
 	@classmethod
 	def rest(cls, on_errors: Callable | None = None):

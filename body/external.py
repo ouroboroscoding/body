@@ -18,17 +18,20 @@ __all__ = [
 # Ouroboros imports
 import config
 import jsonb
+import memory
 import undefined
 
 # Python imports
 from http.cookies import SimpleCookie
 from time import sleep
+from typing import Mapping
 
 # Pip imports
 import requests
 
 # Local imports
 from body import errors
+from body.errors import REST_AUTHORIZATION
 from body.info import service_info
 from body.request import Request
 from body.response import Error, Response
@@ -52,7 +55,7 @@ def _get_cookie():
 config.on_reload(_get_cookie)
 _get_cookie()
 
-def create(service: str, path: str, req: Request = undefined) -> Response:
+def create(service: str, path: str, req: Mapping = undefined) -> Response:
 	"""Create
 
 	Make a POST request
@@ -60,14 +63,14 @@ def create(service: str, path: str, req: Request = undefined) -> Response:
 	Arguments:
 		service (str): The service to call
 		path (str): The path on the service
-		req (Request): The request details, 'data', 'session', and 'meta'
+		req (Mapping): The request details, 'data', 'session', and 'meta'
 
 	Returns:
 		Response
 	"""
 	return request(service, 'create', path, req)
 
-def delete(service: str, path: str, req: Request = undefined) -> Response:
+def delete(service: str, path: str, req: Mapping = undefined) -> Response:
 	"""Delete
 
 	Make a DELETE request
@@ -75,14 +78,14 @@ def delete(service: str, path: str, req: Request = undefined) -> Response:
 	Arguments:
 		service (str): The service to call
 		path (str): The path on the service
-		req (Request): The request details, 'data', 'session', and 'meta'
+		req (Mapping): The request details, 'data', 'session', and 'meta'
 
 	Returns:
 		Response
 	"""
 	return request(service, 'delete', path, req)
 
-def read(service: str, path: str, req: Request = undefined) -> Response:
+def read(service: str, path: str, req: Mapping = undefined) -> Response:
 	"""Read
 
 	Make a GET request
@@ -90,7 +93,7 @@ def read(service: str, path: str, req: Request = undefined) -> Response:
 	Arguments:
 		service (str): The service to call
 		path (str): The path on the service
-		req (Request): The request details, 'data', 'session', and 'meta'
+		req (Mapping): The request details, 'data', 'session', and 'meta'
 
 	Returns:
 		Response
@@ -101,7 +104,7 @@ def request(
 	service: str,
 	action: ActionType,
 	path: str,
-	req: Request = undefined
+	req: Mapping = undefined
 ) -> Response:
 	"""Request
 
@@ -111,7 +114,7 @@ def request(
 		service (str): The service we are requesting data from
 		action (str): The action to take on the service
 		path (str): The path of the request
-		req (Request): The request details, 'data', 'session', and 'meta'
+		req (Mapping): The request details, 'data', 'session', and 'meta'
 
 	Raises:
 		KeyError: if the service or action don't exist
@@ -122,13 +125,22 @@ def request(
 
 	# If the request is undefined
 	if req == undefined:
-		req = Request()
+		req = { }
 
-	# If we got a service instance
+	# If the service exists in memory
 	if service in _instances:
 
-		# Call the service directly and return the instance
-		return _instances[service].request(path, action, req)
+		# Convert the dict to a Request
+		_req = Request.from_dict(req)
+
+		# If we got a string for the session, load it into Memory
+		if hasattr(_req, 'session') and isinstance(_req.session, str):
+			_req.session = memory.load(_req.session)
+			if _req.session is None:
+				return Error(REST_AUTHORIZATION, 'Unauthorized')
+
+		# Call the service directly and return the response
+		return _instances[service].request(path, action, _req)
 
 	# Else, this is an external service
 	else:
@@ -145,14 +157,14 @@ def request(
 		headers['Content-Type'] = 'application/json; charset=utf-8'
 
 		# If the data was passed
-		if getattr(req, 'data', None):
+		if req.get('data', None):
 
 			# Convert the data to JSON and store the length
 			data = jsonb.encode(req.data)
 			headers['Content-Length'] = str(len(data))
 
 		# If we have a session, add the ID to the headers
-		if getattr(req, 'session', None):
+		if req.get('session', None):
 			headers['Authorization'] = (
 				isinstance(req.session, str)
 				and req.session
@@ -160,7 +172,7 @@ def request(
 			)
 
 		# If we received any meta vars
-		if getattr(req, 'meta', None):
+		if req.get('meta', None):
 			for k,v in req.meta.items():
 				headers[f'X-Body-{k}'] = v
 
@@ -240,7 +252,7 @@ def request(
 				# We've tried enough, return an error
 				return Error(errors.SERVICE_UNREACHABLE, str(e))
 
-def update(service: str, path: str, req: Request = undefined) -> Response:
+def update(service: str, path: str, req: Mapping = undefined) -> Response:
 	"""Update
 
 	Make a PUT request
@@ -248,7 +260,7 @@ def update(service: str, path: str, req: Request = undefined) -> Response:
 	Arguments:
 		service (str): The service to call
 		path (str): The path on the service
-		req (Request): The request details, 'data', 'session', and 'meta'
+		req (Mapping): The request details, 'data', 'session', and 'meta'
 
 	Returns:
 		Response

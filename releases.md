@@ -1,5 +1,15 @@
 # body_oc releases
 
+## ???
+- Added logging by each service and REST.
+- Switched service requests to being passed a `Request` instance instead
+of a `jobject` instance.
+- Switched REST from requiring instances of `Service` to being passed the
+classes themselves for tighter control over the process.
+- Switched REST from being passed options to having them pulled from `config`.
+- Switched `Service.rest()` method from an instance (self) method to a class
+method to match REST requirements.
+
 ## 2.2.3
 - Added ability to read sessions through a cookie value instead of just the
 `Authorization` header. Allows avoiding XSS attacks in browser based clients.

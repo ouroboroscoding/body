@@ -13,12 +13,17 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
 	from body.external import create, delete, read, update
+	from body.request import Request, RequestException
 	from body.response import Error, Response, ResponseException
-	from body.service import Service
+	from body.service import LogLevel, Service
+	from body.rest import REST
 
 __all__ = [
 	'create', 'read', 'update', 'delete',
-	'Service', 'Error', 'Response', 'ResponseException'
+	'Request', 'RequestException',
+	'Error', 'Response', 'ResponseException',
+	'LogLevel', 'Service',
+	'REST'
 ]
 
 def __dir__():
@@ -40,6 +45,14 @@ def __getattr__(name):
 		from body.external import update
 		return update
 
+	# request module
+	if name == 'Request':
+		from body.request import Request
+		return Request
+	if name == 'RequestException':
+		from body.request import RequestException
+		return RequestException
+
 	# response module
 	if name == 'Error':
 		from body.response import Error
@@ -52,6 +65,17 @@ def __getattr__(name):
 		return ResponseException
 
 	# service module
+	if name == 'LogLevel':
+		from body.service import LogLevel
+		return LogLevel
 	if name == 'Service':
 		from body.service import Service
 		return Service
+
+	# rest module
+	if name == 'REST':
+		from body.rest import REST
+		return REST
+
+	# Nothing found
+	raise AttributeError(name)

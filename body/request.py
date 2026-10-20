@@ -3,6 +3,7 @@
 
 Holds the class that holds Request messages sent to Service requests
 """
+from __future__ import annotations
 
 __author__		= "Chris Nasr"
 __copyright__	= "Ouroboros Coding Inc."
@@ -17,8 +18,16 @@ import undefined
 
 # Python imports
 from typing import MutableMapping
+from warnings import warn
 
-class RequestException(Exception):
+class RequestException(AttributeError):
+	"""Request Exception
+
+	Handles if a Request attribute is requested and doesn't exist
+
+	Extends:
+		AttributeError
+	"""
 	pass
 
 class Request(object):
@@ -63,6 +72,23 @@ class Request(object):
 			if value is not undefined:
 				setattr(self, name, value)
 
+	def __contains__(self, name: str) -> bool:
+		"""Contains
+
+		Magic method to allow older code to still do checks like
+
+		`if 'data' in request:`
+
+		For when request was a jobject/dict
+
+		Arguments:
+			name (str): The member to check for
+
+		Returns:
+			bool
+		"""
+		return name in self.__dict__
+
 	def __getattr__(self, name):
 		"""Get Attr(ibute)
 
@@ -97,6 +123,91 @@ class Request(object):
 		)
 		return f'{self.__class__.__name__}({fields})'
 
+	def __setattr__(self, name, value):
+		"""Set Attr(ibute)
+
+		Catch bad values being set to the instance
+
+		Arguments:
+			name (str): The name of the attribute to set
+			value (any): The value to set to the name
+
+		Raises:
+			ValueError
+		"""
+
+		# If we got data
+		if name == 'data':
+
+			# Convert it to a jobject at whatever level
+			value = jobject.convert(value)
+
+		# Else, if we got a session
+		elif name == 'session':
+
+			# If it's not a _Memory or a str it's invalid
+			if not isinstance(value, ( _Memory, str )):
+				raise ValueError(name)
+
+		# Else, if we got meta data
+		elif name == 'meta':
+
+			# If it's not already a jobject
+			if not isinstance(value, jobject):
+
+				# If it's a dict, convert
+				if isinstance(value, dict):
+					value = jobject(value)
+
+				# Else, it's invalid
+				else:
+					raise ValueError(name)
+
+		# Else, invalid attribute
+		else:
+			warn(
+				f'unexpected attribute {name!r} on Request',
+				stacklevel = 2
+			)
+
+		# Set the attribute
+		object.__setattr__(self, name, value)
+
+	@classmethod
+	def from_dict(cls, value: dict) -> Request:
+		"""From Dict
+
+		Converts a regular dict to a Request instance
+
+		Arguments:
+			value (dict): The dict to convert
+
+		Returns:
+			Request
+		"""
+		return cls(**value)
+
+	def loggable(self) -> dict:
+		"""Loggable
+
+		Similar to `to_dict`, but only returns the key of the session
+
+		Returns:
+			dict
+		"""
+		ret = { }
+		if 'data' in self.__dict__:
+			ret['data'] = self.__dict__['data']
+		if 'meta' in self.__dict__:
+			ret['meta'] = self.__dict__['meta']
+		if 'session' in self.__dict__:
+			ret['session'] = (
+				isinstance(self.__dict__['session'], _Memory)
+				and self.__dict__['session'].key()
+				or self.__dict__['session']
+			)
+		return ret
+
 	def to_dict(self):
 		"""To Dict
 
@@ -106,7 +217,7 @@ class Request(object):
 			dict
 		"""
 
-		# Return as a dict
+		# Return as a dict by converting each key to a dict
 		return {
 			k: self.__dict__[k]
 			for k in ( 'data', 'meta', 'session' )
