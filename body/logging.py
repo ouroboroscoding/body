@@ -196,7 +196,8 @@ def create_logger(name: str):
 		'handler': None,
 		'listener': None,
 		'logger': None,
-		'indent': conf['pretty_print'] and 2 or None
+		'indent': conf['pretty_print'] and 2 or None,
+		'stream': conf['output'] != 'file'
 	}
 
 	# Init the queue and listener
@@ -306,18 +307,24 @@ def log(name: str, level: LogLevel, msg: str, data: any = undefined):
 	except KeyError:
 		print(f'Invalid logger name {name}', file=stderr)
 
-	# Add the data to the message if it was passed
-	_msg = (
-		data is undefined
-		and msg
-		or f'{msg} {jsonb.encode(data, d['indent'])}'
-	)
+	# Add the data and the name
+	if data is not undefined and d['stream']:
+		_msg = f'{datetime.now()} [{LEVEL_INT_TO_STR[level]}] {name} {msg} {jsonb.encode(data, d['indent'])}'
+
+	# Add the data
+	elif data is not undefined:
+		_msg = f'{datetime.now()} [{LEVEL_INT_TO_STR[level]}] {msg} {jsonb.encode(data, d['indent'])}'
+
+	# Add the name
+	elif d['stream']:
+		_msg = f'{datetime.now()} [{LEVEL_INT_TO_STR[level]}] {name} {msg}'
+
+	# Add nothing
+	else:
+		_msg = f'{datetime.now()} [{LEVEL_INT_TO_STR[level]}] {msg}'
 
 	# Write to the log
-	d['logger'].log(
-		level,
-		f'{datetime.now()} [{LEVEL_INT_TO_STR[level]}] {_msg}'
-	)
+	d['logger'].log(level, _msg)
 
 def _reload_loggers():
 	"""Reload Loggers
