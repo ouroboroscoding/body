@@ -26,15 +26,12 @@ from body.errors import (
 	DATA_FIELDS, SERVICE_ACTION, SERVICE_NO_DATA, SERVICE_NO_META,
 	SERVICE_NO_SESSION, SERVICE_NO_SUCH_NOUN
 )
+from body.external import register_service
 from body.info import service_info
 from body.logging import close_logger, create_logger, log, LogLevel
 from body.request import Request, RequestException
 from body.response import Error, Response, ResponseException
-from body.rest import REST
 from body.shared import ActionType
-
-_instances = { }
-""" Holds the instances of services that have been instantiated """
 
 class Service(abc.ABC):
 	"""Service
@@ -78,21 +75,14 @@ class Service(abc.ABC):
 			Service
 		"""
 
-		# If the key already exists
-		if self._service_name in _instances:
-			raise RuntimeError(
-				'Duplicate service name or duplicate instance of the same '
-				f'service {self._service_name}'
-			)
-
 		# Create the logger
 		create_logger(self._service_name)
 
 		# Logging
 		self.log(LogLevel.DEBUG, 'initialising')
 
-		# Add the service
-		_instances[self._service_name] = self
+		# Register it with external requests
+		register_service(self)
 
 		# Init the list of available methods
 		self._requests = { }
@@ -298,6 +288,9 @@ class Service(abc.ABC):
 
 		# Get the service info
 		dInfo = service_info(cls._service_name)
+
+		# Import REST only when we need it
+		from body.rest import REST
 
 		# Create the REST server using the Client instance and run it
 		REST(
