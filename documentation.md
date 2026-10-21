@@ -19,13 +19,13 @@ javascript / typescript framework.
 - [Module Configuration](#module-configuration)
   - [Example Configuration](#example-configuration)
   - [Configuration Sections](#configuration-sections)
-- [Body Docs](#body-docs)
 - [Calling other Services](#calling-other-services)
 - [Constants](#constants)
 - [Error Codes](#error-codes)
 - [Regular Expressions](#regular-expressions)
+- [Request](#request)
 - [Response & Error](#response--error)
-- [ResponseException](#response-exception)
+- [ResponseException](#responseexception)
 - [REST](#rest)
 - [Service](#service)
 
@@ -53,6 +53,24 @@ immediately after.
 ```json
 {
   "body": {
+    "logging": {
+      "level": "info",
+      "output": "file",
+      "pretty_print": false,
+      "file": {
+        "backups": 30,
+        "name": "{name}.log",
+        "path": "/var/log/services"
+      },
+      "names": {
+        "rest": {
+          "level": "error",
+          "file": {
+            "backups": 5
+          }
+        }
+      }
+    },
     "rest": {
       "allowed": [ "mydomain.com" ],
       "cookie": "session",
@@ -65,8 +83,7 @@ immediately after.
       "services": {
         "myservice": { "port": 8000, "workers": 10 },
         "myotherservice": { "port": 8001, "workers": 2 }
-      },
-      "verbose": true
+      }
     }
   },
 
@@ -140,6 +157,24 @@ to use the **session** one.
 #### body section
 ```json
   "body": {
+    "logging": {
+      "level": "info",
+      "output": "file",
+      "pretty_print": false,
+      "file": {
+        "backups": 14,
+        "name": "{name}.log",
+        "path": "/var/log/services"
+      },
+      "names": {
+        "rest": {
+          "level": "error",
+          "file": {
+            "backups": 7
+          }
+        }
+      }
+    },
     "rest": {
       "allowed": [ "mydomain.com" ],
       "cookie": "session",
@@ -152,11 +187,96 @@ to use the **session** one.
       "services": {
         "myservice": { "port": 8000, "workers": 10 },
         "myotherservice": { "port": 8001, "workers": 2 }
-      },
-      "verbose": true
+      }
     }
   }
 ```
+
+#### body.logging
+Handles all the logging specific configuration like number of backups and paths
+for files.
+
+##### body.logging.output
+`output` has 3 different values: "file", "stdout", and "stderr". For production
+it's best to set it to "file" so that we store everything in log files by day
+that can be deleted when there's too many of them. However if you want to watch
+the output live during development, or you want to manage the log files yourself
+in production, you can use "stdout" / "stderr" to output to the console or
+whatever tool you pipe to the appropriate stream.
+
+The default for `output` is "stdout".
+
+##### body.logging.level
+`level` controls what log info actually gets sent out. Level has 5 different
+values in order of: "debug", "info", "warning": "error", "critical". What this
+means is that whatever level you choose, you will see it and everything to the
+left of it. Choose "debug" and you will see every single message. Pick "warning"
+and you will see warnings, errors, and critical messages.
+
+The default for `level` is "info".
+
+##### body.logging.pretty_print
+By default log files are meant to be one issue per line of the file. This is
+great if that file is parse by another program, or you write your own parser,
+but if you're watching output live while debugging, or you have no intention of
+having the logs parsed by another script, having data printed in a nice human
+readable "pretty" format can be a real blessing. Set `pretty_print` to `true`
+to see things like
+
+```json
+2026-10-20 15:29:27.185491 [INFO] REQUEST __list {
+  "data": [
+    "/access",
+    [
+      "/account",
+      {
+        "_id": "2a096f9272da11f0af9335bc0e1334cd"
+      }
+    ]
+  ]
+}
+```
+
+instead of
+
+```json
+2026-10-20 15:29:27.185491 [INFO] REQUEST __list { "data": [ "/access", [ "/account", { "_id": "2a096f9272da11f0af9335bc0e1334cd" } ] ] }
+```
+
+##### body.logging.file
+`file` is only applicable when you choose "file" for `output`. It controls where
+files are stored, under what name, and how many backups are made.
+
+`file.path` controls the directory where the log files will be placed. It can
+have an ending slash or not.
+
+The default value is `"./"`, the current directory your script is being run
+from.
+
+`file.name` controls the template used to name log files. The "{name}" variable
+corresponds to the name of the log file being created, in the case of services,
+this is the name of the service in lowercase, i.e. `class MyService` is
+"myservice". REST creates its own log using "rest".
+
+The default value is `"{name}.log"`.
+
+`file.backups` controls the number of days of backups to keep. The current log
+will use the `file.name` template, subsequent files will use the data the file
+corresponds to. i.e. "myservice.log", "myservice.log.2026-10-18",
+"myservice.log.2026-10-17", etc.
+
+The default value is `30`.
+
+##### body.logging.names
+Used to override default values for specific log files. For example, maybe since
+"rest" is not really relevant data, most of the time we just want to see
+"errors" and we don't need as many backups, only 1 week instead of the normal 2.
+Anything that is listed in `body.logging` can be added to `names` in order to
+override it for that specific log name.
+
+#### body.rest
+Handles all the REST specific configuration like CORS, cookies, and hostname and
+ports.
 
 ##### body.rest.allowed
 Represents the domains that can make cross origin requests to the RESTlike
@@ -192,6 +312,15 @@ currently running server.
 ```json
       "monitor": [ "admin", "Gcg6sKMY" ],
 ```
+
+If you would rather use a different URI set the third element
+
+```json
+      "monitor": [ "admin", "Gcg6sKMY", "my_monitor_uri" ],
+```
+
+And this will set `https://admin:Gcg6sKMY@localhost:8000/my_monitor_uri` as the
+monitor endpoint for "myservice".
 
 ##### body.rest.services
 In order to know how to both run and connect to
@@ -238,23 +367,6 @@ this where **myotherservice** is running on another server inside the network.
 [module configuration](#module-configuration) /
 [configuration sections](#configuration-sections) /
 [body section](#body-section) ]
-
-##### body.rest.verbose
-Set to `true` to print out every request that comes in, and every response that
-goes out.
-
-[ [top](#body_oc) / [contents](#contents) /
-[module configuration](#module-configuration) /
-[configuration sections](#configuration-sections) /
-[body section](#body-section) ]
-
-## Body Docs
-`body` Comes with a script to auto generate documentation from
-[Service](#service) instances.
-
-For more information, see the [body-docs](body-docs.md) documentation.
-
-[ [top](#body_oc) / [contents](#contents) ]
 
 ## Calling other Services
 `body.request` Handles making a request to another service.
@@ -344,7 +456,6 @@ REST_REQUEST_DATA = 100
 REST_CONTENT_TYPE = 101
 REST_AUTHORIZATION = 102
 REST_LIST_TO_LONG = 103
-REST_LIST_INVALID_URI = 104
 ```
 
 Errors related to the service
@@ -409,6 +520,28 @@ if not PHONE_NUMBER_NA.match('1(555-555-1234'):
 
 [ [top](#body_oc) / [contents](#contents) ]
 
+## Request
+`Request` is the class passed to all request paths on Services as well as when
+[calling other services](#calling-other-services).
+
+It can optionally contain any of the 3 following members:
+
+### Request.data
+This is the main data passed to requests and is stored using a [jobject](https://pypi.org/project/jobject/).
+When passed via REST it is sent as the body of the message using JSON and so
+must confirm to data that can be converted to and from JSON.
+
+### Request.session
+This is the session data passed to requests. It is stored using [Memory](https://pypi.org/project/memory-oc/).
+When passed via REST it is sent as a key either in a [cookie](#bodyrestcookie)
+or in the `Authorization` header.
+
+### Rquest.meta
+This is meta data passed to requests and is stored using a [jobject](https://pypi.org/project/jobject/).
+When passed via REST it is sent as `X-Body-[key]` headers so values must be
+strings or be able to be converted to strings. Note that the receiving end will
+always end up with strings if received via REST.
+
 ## Response & Error
 `Response` is the class returned from all [Service](#service) requests. It
 contains 3 parts, [data](#responsedata) / [error](#responseerror), and
@@ -420,18 +553,18 @@ It can be considered a valid response to the request. Here we are returning a
 list of records from a READ / GET request.
 
 ```python
-from body import Response, Service
+from body import Request, Response, Service
 class MyService(Service):
-  def my_request_read(self, req: jobject) -> Response:
+  def my_request_read(self, req: Request) -> Response:
 	return Response([ """ records """ ])
 ```
 
 Here we are returning a simple boolean based on a record existing or not
 ```python
-from body import Response, Service
+from body import Request, Response, Service
 from records.user import User
 class MyService(Service):
-  def my_request_exists_read(self, req: jobject) -> Response:
+  def my_request_exists_read(self, req: Request) -> Response:
 	self.check_data(req.data, [ '_id' ])
 	return Response(
 	  User.exists(req.data._id)
@@ -449,10 +582,10 @@ anything, we return only an error with the `code` DB_NO_RECORD, and the `msg`
 as a list with the ID that failed and the record type that it failed for.
 
 ```python
-from body import errors, Response, Service
+from body import errors, Request, Response, Service
 from records.user import User
 class MyService(Service):
-  def my_request_read(self, req: jobject) -> Response:
+  def my_request_read(self, req: Request) -> Response:
 	self.check_data(req.data, [ '_id' ])
 	user = User.get(req.data._id)
 	if not user:
@@ -471,10 +604,10 @@ are None. Here is the same script as above, but replacing `Response(error=())`
 with `Error()`.
 
 ```python
-from body import Error, errors, Response, Service
+from body import Error, errors, Request, Response, Service
 from records.user import User
 class MyService(Service):
-  def my_request_read(self, req: jobject) -> Response:
+  def my_request_read(self, req: Request) -> Response:
 	self.check_data(req.data, [ '_id' ])
 	user = User.get(req.data._id)
 	if not user:
@@ -495,11 +628,11 @@ action. Or perhaps you are returning the data requested, but you add a warning
 that it, the data, is out of date at the moment.
 
 ```python
-from body import Response, Service
+from body import Request, Response, Service
 from records.user import User
 from em import send
 class MyService(Service):
-  def my_request_create(self, req: jobject) -> Response:
+  def my_request_create(self, req: Request) -> Response:
 	self.check_data(req.data, [ 'record' ])
 	_id = User(req.data.record)
 	email = send(
@@ -517,13 +650,13 @@ class MyService(Service):
 
 [ [top](#body_oc) / [contents](#contents) / [response & error](#response--error) ]
 
-# ResponseException
+## ResponseException
 `ResponseException` is useful if you need to call other functions in your
 request methods that themselves will generate the `Response` or `Error`.
 This is especially helpful for errors.
 
 ```python
-from body import errors, Response, ResponseException, Service
+from body import errors, Request, Response, ResponseException, Service
 class MyService(Service):
 
   @classmethod
@@ -532,7 +665,7 @@ class MyService(Service):
 	  error=(errors.ALREADY_DONE, 'we did it already')
 	)
 
-  def my_service_create(self, req: jobject) -> Response:
+  def my_service_create(self, req: Request) -> Response:
 	self.check_data(req.data, [ '_id' ])
 	self._my_method(req.data._id)
 	return Response(True)
@@ -556,19 +689,19 @@ the first thing in your code. Nothing else can run / be imported before the
 from gevent import monkey
 monkey.patch_all()
 
-from body import Service
+from body import Request, Response, Service
 import config
 
 class MyService(Service):
   def reset():
 	pass
-  def my_request_create(self, req: jobject) -> Response:
+  def my_request_create(self, req: Request) -> Response:
 	return Response(id)
-  def my_request_delete(self, req: jobject) -> Response:
+  def my_request_delete(self, req: Request) -> Response:
 	return Response(True)
-  def my_request_read(self, req: jobject) -> Response:
+  def my_request_read(self, req: Request) -> Response:
 	return Response(user)
-  def my_request_update(self, req: jobject) -> Response:
+  def my_request_update(self, req: Request) -> Response:
 	return Response(True)
 
 def errors(error):
@@ -603,10 +736,8 @@ system you can create `REST` directly and get access to the http server instance
 ```python
 from body.rest import REST
 REST(
-	[ MyService() ],
-	cors = [ 'mydomain.com', 'myotherdomain.com' ],
-	on_errors = errors,
-	verbose = True
+	[ MyService ],
+	on_errors = errors
 ).run(
 	host = '127.0.0.1',
 	port = 80,
@@ -615,16 +746,24 @@ REST(
 )
 ```
 
-The run command corresponds directly to the
-[run()](https://bottlepy.org/docs/dev/api.html) command of Bottle and will
-support all the same arguments.
+[ [top](#body_oc) / [contents](#contents) ]
 
-Additionally, you can override the Service.additional_routes variable to add
-custom [Bottle](https://bottlepy.org/docs/dev/) routes upon any call to REST.
+## Service
+`Service` is the class all services should extend. It has several helper
+methods, one abstract method, and a specific format for any other method which
+the user wants to make available to REST, CLI, or some other interface.
+
+### additional_routes
+
+We can add simple [Bottle](https://bottlepy.org/docs/dev/routing.html#explicit-routing-configuration)
+routes to our services that will automatically be added to any call to REST that
+uses the instance. This includes adding the necessary service prefix, and the
+OPTIONS type to the methods.
 
 ```python
 def test_route():
-	pass
+	print(request.query)
+	return '<html />'
 
 MyService.additional_routes = [
 	( '/test', 'GET', test_route )
@@ -635,7 +774,8 @@ or
 
 ```python
 def test_route():
-	pass
+	print(request.query)
+	return '<html />'
 
 class MyService(Service):
 	additional_routes = [
@@ -643,24 +783,35 @@ class MyService(Service):
 	]
 ```
 
-[ [top](#body_oc) / [contents](#contents) ]
+or even
 
-## Service
-`Service` is the class all services should extend. It has one helper method,
-one abstract method, and a specific format for any other method which the user
-wants to make available to REST, CLI, or some other interface.
+```python
+class MyService(Service):
+
+	def __init__(self):
+		super(MyService, self).__init__()
+		self.additional_routes = [
+			( '/test', 'GET', self.test_route )
+		]
+
+	def test_route():
+		print(request.query)
+		return '<html />'
+```
+
+[ [top](#body_oc) / [contents](#contents) / [service](#service) ]
 
 ### check_data
 The `check_data` method is a helper for checking the input to any request
 exists before trying to use it.
 
 ```python
-from body import errors, Response, Service
+from body import errors, Request, Response, Service
 from records.user import User
 from records.permissions import Permissions
 class MyService(Service):
 
-  def my_request_create(self, req: jobject) -> Response:
+  def my_request_create(self, req: Request) -> Response:
 
 	self.check_data(req.data, [ 'user', 'permissions' ])
 
@@ -732,6 +883,24 @@ Now the `Response` we get is
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) ]
 
+### log
+Used internally to log requests and their responses, but can also be called
+with different log levels by your own services. This is helpful if you don't
+want to have to create your own log.
+
+```python
+from body import Error, LogLevel, Request, Service
+
+class MyService(Service):
+	def always_error_read(self, req) -> Response:
+		self.log(LogLevel.ERROR, 'This is an error log')
+		return Error(DATA_FIELDS, [ [ '_id', 'missing' ] ])
+```
+
+See [LogLevel](#loglevel) for all possible types.
+
+[ [top](#body_oc) / [contents](#contents) / [service](#service) ]
+
 ### reset
 Called when the service(s) are started and when they are sent a reset request.
 It's best to do any setup here.
@@ -746,6 +915,7 @@ class MyService(Service):
 It is entirely up to you what reset can and can't do in your service. You are
 only required to provide it, and could easily do the following and still be
 considered a valid `Service`
+
 ```python
 from body import Service
 class MyService(Service):
@@ -755,31 +925,74 @@ class MyService(Service):
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) ]
 
-### additional_routes
+### rest
+`rest` is a shortcut for starting a single service with `REST`. It will use the
+data from the config.rest section to know how to setup the `host`, `port`
+and other things like `CORS`.
 
-Previously mentioned under [Low level http](#low-level-http), we can add simple
-[Bottle](https://bottlepy.org/docs/dev/routing.html#explicit-routing-configuration)
-routes to our services that will automatically be added to any call to REST that
-uses the instance. This includes adding the necessary service prefix, and the
-OPTIONS type to the methods.
+When used be sure to do the `gevent` monkey patch as the first thing in your
+file or you might have issues.
 
 ```python
-from body import Service
-from bottle import request, response
+if __name__ == '__main__':
+	from gevent import monkey
+	monkey.patch_all()
 
-def test_route():
-	print(request.query)
-	return '<html />'
+from body import Request, Response, Service
 
-class MyServie(Service):
-	additional_routes = [
-		( '/test', 'GET', test_route )
-	]
+class MyService(Service):
+	"""My Service"""
+
+	def user_create(self, req: Request) -> Response:
+		"""Create a user"""
+		pass
+
+	def user_read(self, req: Request) -> Response:
+		"""Read a user"""
+		pass
+
+if __name__ == '__main__':
+	Admin.rest()
 ```
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) ]
 
-### Requests
+### service_name
+Returns the name of the service all in lowercase which is how it's identified by
+REST and any other external calls like `create`, `delete`, `read`, and `update`.
+
+```python
+from body import Service
+class MyService(Service):
+  def reset():
+	pass
+
+# prints "myservice"
+print(MyService.service_name())
+```
+
+[ [top](#body_oc) / [contents](#contents) / [service](#service) ]
+
+### shutdown
+If for some reason you instantiate any of the Services yourself, rather than
+going through `REST` AND you have logging enabled, you MUST call this before
+your app / script closes if you want to gaurantee everything is written to the
+log.
+
+```python
+from body import Service
+class MyService(Service):
+  def reset():
+	pass
+
+my_service = MyService()
+
+# ... do stuff ...
+
+my_service.shutdown()
+```
+
+### Service Requests
 Requests are the part that interfaces like REST connect to and export to
 whatever client they represent. They always receive a single argument called
 `req`, must return a `Response`, and must follow a specific format for naming
@@ -794,67 +1007,57 @@ following `_create`, `_read`, `_update`, or `_delete`.
 
 The following are all valid request methods.
 ```python
-from body import Service
+from body import Request, Service
 class MyService(Service):
   reset():
 	pass
 
   # POST user
-  def user_create(self, req: jobject) -> Response:
+  def user_create(self, req: Request) -> Response:
 	pass
 
   # DELETE user
-  def user_delete(self, req: jobject) -> Response:
+  def user_delete(self, req: Request) -> Response:
 	pass
 
   # GET user
-  def user_read(self, req: jobject) -> Response:
+  def user_read(self, req: Request) -> Response:
 	pass
 
   # PUT user
-  def user_update(self, req: jobject) -> Response:
+  def user_update(self, req: Request) -> Response:
 	pass
 
   # GET users/by/id
-  def users_by_id_read(self, req: jobject) -> Response:
+  def users_by_id_read(self, req: Request) -> Response:
 	pass
 
   # DELETE users/by/category
-  def users_by_category_delete(self, req: jobject) -> Response:
+  def users_by_category_delete(self, req: Request) -> Response:
 	pass
 
   # GET search/users
-  def search_users_read(self, req: jobject) -> Response:
+  def search_users_read(self, req: Request) -> Response:
 	pass
 
   # PUT a
-  def a_update(self, req: jobject) -> Response:
+  def a_update(self, req: Request) -> Response:
 	pass
 ```
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) /
-[requests](#requests) ]
+[requests](#service-requests) ]
 
 #### req
-`req` contains information about the request. It can contain
-
-`data` which is any valid data that can be converted to JSON.
-
-`session` an instance of a [Memory](https://pypi.org/project/memory-oc/)
-
-`meta` which is additional string values stored by string keys. This data is
-passed via headers when communication from one service to another in separate
-processes, so assume if you can't put it into a header, you can't put it into
-`meta`. It should be used by other services that wish to pass along non-data
-information, such as internal keys, authorization, etc. It replaces setting
-headers directly and making it impossible to decouple services form the medium.
+`req` contains information about the request. See the [documentation](#request)
+on `Request` for more info.
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) /
-[requests](#requests) ]
+[requests](#service-requests) ]
 
 #### Response
 All request methods must return a `Response` instance. See the
 [documentation](#response--error) on `Response` and `Error` for more info.
 
 [ [top](#body_oc) / [contents](#contents) / [service](#service) /
-[requests](#requests) ]
+[requests](#service-requests) ]

@@ -36,4 +36,3 @@ monkey.patch_all()
 Check out [@ouroboros/body](https://www.npmjs.com/package/@ouroboros/body)
 on npm if you want to easily connect to body services in your choice of
 javascript / typescript framework.
-

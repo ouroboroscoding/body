@@ -9,9 +9,11 @@ __copyright__	= "Ouroboros Coding Inc."
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-15"
 
+__all__ = [ 'Service' ]
+
 # Ouroboros imports
-import config
 from tools import evaluate
+import undefined
 
 # Python imports
 import abc
@@ -20,10 +22,19 @@ import re
 from typing import List
 
 # Module imports
-from body.external import register_service
-from body.errors import DATA_FIELDS
-from body.response import ResponseException
+from body.errors import (
+	DATA_FIELDS, SERVICE_ACTION, SERVICE_NO_DATA, SERVICE_NO_META,
+	SERVICE_NO_SESSION, SERVICE_NO_SUCH_NOUN
+)
+from body.info import service_info
+from body.logging import close_logger, create_logger, log, LogLevel
+from body.request import Request, RequestException
+from body.response import Error, Response, ResponseException
 from body.rest import REST
+from body.shared import ActionType
+
+_instances = { }
+""" Holds the instances of services that have been instantiated """
 
 class Service(abc.ABC):
 	"""Service
@@ -51,47 +62,75 @@ class Service(abc.ABC):
 	SomeService.additional_routes = [ ( '/custom', 'GET', custom ) ]
 	"""
 
-	def __init__(self, name: str | None = None):
+	__member_to_error = {
+		'data': SERVICE_NO_DATA,
+		'meta': SERVICE_NO_META,
+		'session': SERVICE_NO_SESSION
+	}
+	"""Maps missing request member calls to error codes"""
+
+	def __init__(self):
 		"""Constructor
 
 		Initialises the service
-
-		Arguments:
-			name (str): Optional, uses __class__.__name__.lower() if not set
 
 		Returns:
 			Service
 		"""
 
-		# Store the name
-		self._name = name is None \
-			and self.__class__.__name__.lower() \
-			or name
+		# If the key already exists
+		if self._service_name in _instances:
+			raise RuntimeError(
+				'Duplicate service name or duplicate instance of the same '
+				f'service {self._service_name}'
+			)
+
+		# Create the logger
+		create_logger(self._service_name)
+
+		# Logging
+		self.log(LogLevel.DEBUG, 'initialising')
+
+		# Add the service
+		_instances[self._service_name] = self
 
 		# Init the list of available methods
-		self._requests = []
+		self._requests = { }
 
-		# Go through all the functions found on the service
-		for sFunc in dir(self):
+		# Go through all the methods found on the service
+		for method in dir(self):
 
 			# Check the format of the method name
-			oMatch = self.__noun_regex.match(sFunc)
+			oMatch = self.__noun_regex.match(method)
 
 			# If it's a match
 			if oMatch:
 
-				# Add it to the list
-				self._requests.append({
-					'name': oMatch.group(1),
-					'action': oMatch.group(2),
-					'func': getattr(self, sFunc)
-				})
+				# Generate the URL
+				sUri = oMatch.group(1).replace('_', '/')
 
-		# Register the service with body
-		self._info = register_service(self._name, self)
+				# Store the url and action
+				try:
+					self._requests[sUri][oMatch.group(2)] = getattr(self, method)
+				except KeyError:
+					self._requests[sUri] = {
+						oMatch.group(2): getattr(self, method)
+					}
 
 		# Call reset
 		self.reset()
+
+	def __init_subclass__(cls, **kwargs):
+		"""Init Subclass
+
+		Handles setting up sub/child class information on definition
+		"""
+
+		# Call the parent method
+		super().__init_subclass__(**kwargs)
+
+		# Set the service name
+		cls._service_name = cls.__name__.lower()
 
 	@staticmethod
 	def check_data(data: dict, fields: list):
@@ -133,16 +172,79 @@ class Service(abc.ABC):
 				[ [ f, 'missing' ] for f in e.args ]
 			))
 
-	@property
-	def name(self) -> str:
-		"""Name
+	def log(self, level: LogLevel, msg: str, data: any = undefined):
+		"""Log
 
-		Returns the name of the service
+		Writes a message to the log or stdout. If data is passed, it will be
+		converted to easily human readable output if sent to stdout, otherwise
+		be printed on one line to keep log files easily parsable.
+
+		Arguments:
+			level (LogLevel): The level of the log message
+			msg (str): The message to write to the log
+			data (any): Data that will be converted to JSON and appended to the
+				message
+		"""
+		log(self._service_name, level, msg, data)
+
+	def request(self, noun: str, action: ActionType, req: Request) -> Response:
+		"""Request
+
+		Called with a noun / action in order to call the appropriate method
+		associated. Created to simplify and standardise calls whether from
+		internal instances or from REST requests.
+
+		Arguments:
+			noun (str): The noun being called in the request
+			action (ActionType): The type of request being made
+			req (Request): The associated request data
+
+		Raises:
+			ResponseException
 
 		Returns:
-			str
+			Response
 		"""
-		return self._name
+
+		# Logging
+		self.log(LogLevel.INFO, f'REQUEST {action} {noun}', req.loggable())
+
+		# Init, no function
+		f = None
+
+		# Try to find the method
+		try:
+			f = self._requests[noun][action]
+
+		# If we got a KeyError
+		except KeyError as e:
+			if e.args[0] == noun:
+				response = Error(SERVICE_NO_SUCH_NOUN)
+			elif e.args[0] == action:
+				response = Error(SERVICE_ACTION)
+			else:
+				raise e
+
+		# If we have a function
+		if f:
+
+			# Try to call the method
+			try:
+				response = f(req)
+
+			# If we got a request member error
+			except RequestException as e:
+				response = Error(self.__member_to_error[e.args[0]])
+
+			# If we got a response exception, return the Response
+			except ResponseException as e:
+				response = e.args[0]
+
+		# Logging
+		self.log(LogLevel.INFO, f'RESPONSE {action} {noun}', response.to_dict())
+
+		# Return the response
+		return response
 
 	@abc.abstractmethod
 	def reset(self):
@@ -156,57 +258,54 @@ class Service(abc.ABC):
 		"""
 		raise NotImplementedError('Must implement the "reset" method')
 
-	@property
-	def requests(self) -> List[dict]:
-		"""Requests
+	@classmethod
+	def service_name(cls) -> str:
+		"""Service Name
 
-		Returns a list of all the requests available in the service
+		Returns the name of the service, which is just the class name in all
+		lowercase.
 
 		Returns:
-			dict[]
+			str
 		"""
-		return self._requests
+		return cls._service_name
 
-	def rest(self,
-		additional: List[list] = None,
-		on_errors: Callable | None = None
-	):
+	def shutdown(self):
+		"""Shutdown
+
+		Should be called when the Service is no longer needed, either before
+		it is removed from memory, or before the interpreter closes completed
+		"""
+
+		# Logging
+		self.log(LogLevel.DEBUG, 'shutting down')
+
+		# Shut down the logger
+		close_logger(self._service_name)
+		self._logger = None
+
+	@classmethod
+	def rest(cls, on_errors: Callable | None = None):
 		"""Rest
 
 		Creates a REST instance using the service as the only internally
-		accessible one
-
-		Additional URIs can be passed to the server to handle things outside of
-		the Service architecture.
-
-		def custom():
-			return "<html />"
-
-		rest(
-			additional = [ [ '/custom', 'GET', custom ] ]
-		)
+		accessible one.
 
 		Arguments:
-			additional (list): A list of tuples representing arguments to route.
 			on_errors (callable): An optional callback for when a service
 				request crashes
 		"""
 
-		# Create the REST server using the Client instance
-		oRest = REST(
-			instances = [ self ],
+		# Get the service info
+		dInfo = service_info(cls._service_name)
+
+		# Create the REST server using the Client instance and run it
+		REST(
+			services = [ cls ],
 			on_errors = on_errors
-		)
-
-		# If there's any additional
-		if additional:
-			for l in additional:
-				oRest.route(*l)
-
-		# Run the server forever
-		oRest.run(
-			host = self._info['host'],
-			port = self._info['port'],
-			workers = self._info['workers'],
-			timeout = 'timeout' in self._info and self._info['timeout'] or 30
+		).run(
+			host = dInfo['host'],
+			port = dInfo['port'],
+			workers = dInfo['workers'],
+			timeout = 'timeout' in dInfo and dInfo['timeout'] or 30
 		)
