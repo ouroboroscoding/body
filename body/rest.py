@@ -134,20 +134,23 @@ class _BaseRoute(object):
 		# If we have an auth token
 		if auth:
 
-			# Get the session from the Authorization token
-			req.session = memory.load(auth)
+			# Attempt to get the session using the found token
+			session = memory.load(auth)
 
 			# If the session is found
-			if req.session:
+			if session:
 
 				# If we have a cookie
 				if cookie:
 
 					# Extend the cookie
-					set_session_cookie(auth, req.session.ttl())
+					set_session_cookie(auth, session.ttl())
 
 				# Extend the session itself
-				req.session.extend()
+				session.extend()
+
+				# Add it to the request
+				req.session = session
 
 			# Else, session has expired / been deleted
 			else:
