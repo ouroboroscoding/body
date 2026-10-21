@@ -1,5 +1,8 @@
 # body_oc releases
 
+## 2.3.1
+- Fixed bugs in external module do to 2.3.0 changes.
+
 ## 2.3.0
 - Added logging by each service and REST.
 - Switched service requests to being passed a `Request` instance instead

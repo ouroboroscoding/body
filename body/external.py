@@ -16,7 +16,6 @@ __all__ = [
 ]
 
 # Ouroboros imports
-import config
 import jsonb
 import memory
 import undefined
@@ -24,20 +23,20 @@ import undefined
 # Python imports
 from http.cookies import SimpleCookie
 from time import sleep
-from typing import Mapping
+from typing import Mapping, TYPE_CHECKING
 
 # Pip imports
 import requests
 
 # Local imports
-from body import errors
+from body import cookie_auth, errors
 from body.errors import REST_AUTHORIZATION
 from body.info import service_info
 from body.request import Request
 from body.response import Error, Response
-from body.rest import set_session_cookie
-from body.service import _instances
 from body.shared import ActionType
+if TYPE_CHECKING:
+	from body.service import Service
 
 __action_to_method = {
 	'create': requests.post,
@@ -47,13 +46,9 @@ __action_to_method = {
 }
 """Map actions to request methods"""
 
-# Get cookie info and make sure we get updates
-__cookie = None
-def _get_cookie():
-	global __cookie
-	__cookie = config.body.rest.cookie(False)
-config.on_reload(_get_cookie)
-_get_cookie()
+# Local variables
+_instances = { }
+""" Holds the instances of services that have been registered """
 
 def create(service: str, path: str, req: Mapping = undefined) -> Response:
 	"""Create
@@ -99,6 +94,28 @@ def read(service: str, path: str, req: Mapping = undefined) -> Response:
 		Response
 	"""
 	return request(service, 'read', path, req)
+
+def register_service(instance: Service):
+	"""Register Service
+
+	Register a service as internal so requests can be run directly
+
+	Arguments:
+		instance (Service): The instance of the service to register
+	"""
+
+	# Get the name
+	name = instance.service_name()
+
+	# If it already exists
+	if name in _instances:
+		raise RuntimeError(
+			'Duplicate service name or duplicate instance of the same '
+			f'service {name}'
+		)
+
+	# Register it
+	_instances[name] = instance
 
 def request(
 	service: str,
@@ -160,20 +177,20 @@ def request(
 		if req.get('data', None):
 
 			# Convert the data to JSON and store the length
-			data = jsonb.encode(req.data)
+			data = jsonb.encode(req['data'])
 			headers['Content-Length'] = str(len(data))
 
 		# If we have a session, add the ID to the headers
 		if req.get('session', None):
 			headers['Authorization'] = (
-				isinstance(req.session, str)
-				and req.session
-				or req.session.key()
+				isinstance(req['session'], str)
+				and req['session']
+				or req['session'].key()
 			)
 
 		# If we received any meta vars
 		if req.get('meta', None):
-			for k,v in req.meta.items():
+			for k,v in req['meta'].items():
 				headers[f'X-Body-{k}'] = v
 
 		# Loop requests so we don't fail just because of a network hiccup
@@ -206,32 +223,35 @@ def request(
 				# If we got the wrong content type
 				if response.headers['Content-Type'].lower() != \
 					'application/json; charset=utf-8':
+
+					# Return the content type error
 					return Error(
 						errors.SERVICE_CONTENT_TYPE,
 						response.headers['content-type']
 					)
 
 				# If we have a session cookie value
-				if __cookie:
+				cookie_name = cookie_auth.name()
+				if cookie_name:
 
 					# Check if it was created
 					if 'Set-Cookie' in response.headers:
 
 						# Convert the string to a cookies object
-						oCookies = SimpleCookie()
-						oCookies.load(response.headers['Set-Cookie'])
+						cookies = SimpleCookie()
+						cookies.load(response.headers['Set-Cookie'])
 
 						# If the session cookie exists
-						if __cookie in oCookies:
+						if cookie_name in cookies:
 
 							# Fetch it
-							oCookie = oCookies[__cookie]
+							cookie = cookies[cookie_name]
 
 							# Create the cookie ourselves
-							sMaxAge = oCookie['max-age']
-							set_session_cookie(
-								oCookie.value,
-								int(sMaxAge) if sMaxAge else 0
+							max_age = cookie['max-age']
+							cookie_auth.set(
+								cookie.value,
+								int(max_age) if max_age else 0
 							)
 
 				# Turn the content into a Response and return it

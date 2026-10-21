@@ -12,7 +12,7 @@ __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-03-17"
 
 # Limit exports
-__all__ = [ 'bottle', 'clear_session_cookie', 'REST', 'set_session_cookie' ]
+__all__ = [ 'bottle', 'REST' ]
 
 # Make sure we patched
 from gevent import signal_handler, monkey, Timeout as GTimeout
@@ -28,7 +28,6 @@ import config
 import jobject
 import jsonb
 import memory
-import undefined
 
 # Python imports
 from collections.abc import Callable
@@ -45,7 +44,7 @@ from gevent.pool import Pool
 from gevent.pywsgi import LoggingLogAdapter, WSGIHandler, WSGIServer
 
 # Local imports
-from body.constants import SECONDS_365_DAYS
+from body import cookie_auth
 from body.errors import (
 	REST_AUTHORIZATION, REST_CONTENT_TYPE, REST_LIST_TO_LONG, REST_REQUEST_DATA,
 	SERVICE_CRASHED, SERVICE_NO_DATA, SERVICE_NO_SESSION
@@ -56,9 +55,6 @@ from body.response import Error, Response, ResponseException
 from body.shared import ActionType, MethodType
 if TYPE_CHECKING:
 	from body.service import Service
-
-# Global vars
-_cookie = undefined
 
 class _BaseRoute(object):
 	"""Base Route
@@ -120,10 +116,10 @@ class _BaseRoute(object):
 		cookie = False
 		auth = False
 
-		# Do we have a session cookie name and was it sent?
-		if _cookie and bottle.request.cookies.get(_cookie, False):
+		# Do we have a session cookie value?
+		auth = cookie_auth.get()
+		if auth:
 			cookie = True
-			auth = bottle.request.cookies[_cookie]
 			log('rest', LogLevel.DEBUG, 'Authorization from cookie')
 
 		# Else, If the request sent a authorization token
@@ -144,7 +140,7 @@ class _BaseRoute(object):
 				if cookie:
 
 					# Extend the cookie
-					set_session_cookie(auth, session.ttl())
+					cookie_auth.set(auth, session.ttl())
 
 				# Extend the session itself
 				session.extend()
@@ -160,7 +156,7 @@ class _BaseRoute(object):
 
 				# If we had a cookie, delete it
 				if cookie:
-					clear_session_cookie()
+					cookie_auth.clear()
 
 				# Return the response as 401
 				bottle.response.status = 401
@@ -776,8 +772,6 @@ class REST(bottle.Bottle):
 			RestService
 		"""
 
-		global _cookie
-
 		# If we're already instantiated
 		if self.__instantiated:
 			raise RuntimeError('REST can only be instantiated once')
@@ -798,7 +792,6 @@ class REST(bottle.Bottle):
 		# Get necessary config values
 		conf = config.body.rest({
 			'allowed': [ 'localhost' ],
-			'cookie': False,
 			'lists': True,
 			'monitor': None
 		})
@@ -846,10 +839,10 @@ class REST(bottle.Bottle):
 		if on_errors:
 			_BaseRoute.set_on_error(on_errors)
 
-		# If we have a cookie name, set the global var
-		_cookie = conf['cookie']
-		if _cookie:
-			log('rest', LogLevel.DEBUG, f'session cookie: {_cookie}')
+		# If we have a cookie name, log it
+		cookie = cookie_auth.name()
+		if cookie:
+			log('rest', LogLevel.DEBUG, f'session cookie: {cookie}')
 
 		# Add the monitor path if needed
 		if conf['monitor'] is not None:
@@ -1165,64 +1158,3 @@ class TimeoutHandler(WSGIHandler):
 		# Else, default to regular handle_error
 		else:
 			super().handle_error(t, v, tb)
-
-def clear_session_cookie():
-	"""Clear Session Cookie
-
-	Deletes the cookie for the session
-	"""
-
-	global _cookie
-
-	# If we don't have the cookie value
-	if _cookie is undefined:
-		_cookie = config.body.rest.cookie(False)
-
-	# If we have no cookie
-	if _cookie is False:
-		return
-
-	# Delete the cookie
-	bottle.response.set_cookie(
-		_cookie,
-		'',
-		max_age = 0,
-		path = '/',
-		secure = True,
-		samesite = 'Lax',
-		httponly = True
-	)
-
-def set_session_cookie(key, ttl):
-	"""Set Session Cookie
-
-	Sets the httpOnly cookie for the session
-
-	Arguments:
-		key (str): The session key
-		ttl (uint): The time to live for the cookie
-	"""
-
-	global _cookie
-
-	# If we don't have the cookie value
-	if _cookie is undefined:
-		_cookie = config.body.rest.cookie(False)
-
-	# If we have no cookie
-	if _cookie is False:
-		return
-
-	# If the ttl is 0
-	iTTL = ttl or SECONDS_365_DAYS
-
-	# Set the cookie in bottle
-	bottle.response.set_cookie(
-		_cookie,
-		key,
-		max_age = iTTL,
-		path = '/',
-		secure = True,
-		samesite = 'Lax',
-		httponly = True
-	)
