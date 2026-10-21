@@ -1,6 +1,6 @@
 # body_oc releases
 
-## ???
+## 2.3.0
 - Added logging by each service and REST.
 - Switched service requests to being passed a `Request` instance instead
 of a `jobject` instance.
